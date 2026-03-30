@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Copilot Reader — IDE Dark Theme</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg-main:#1e1e1e;--bg-sidebar:#252526;--bg-panel:#2d2d2d;--bg-hover:#37373d;
+  --bg-active:#094771;--bg-input:#3c3c3c;
+  --text-primary:#d4d4d4;--text-secondary:#858585;--text-accent:#569cd6;
+  --border:#3c3c3c;--border-active:#007acc;
+  --green:#4ec9b0;--green-bright:#73c991;--blue:#569cd6;--purple:#c586c0;
+  --orange:#ce9178;--cyan:#9cdcfe;--red:#f44747;--yellow:#dcdcaa;
+  --gray-dim:#6a6a6a;
+  --font-mono:'Cascadia Code','Fira Code','JetBrains Mono','SF Mono','Consolas','Monaco','Menlo',monospace;
+  --font-sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+}
+html,body{height:100%;overflow:hidden;font-family:var(--font-sans);background:var(--bg-main);color:var(--text-primary);font-size:13px;line-height:1.4}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#424242;border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#555}
+::-webkit-scrollbar-corner{background:transparent}
+
+/* Layout */
+.app{display:flex;height:100vh;width:100%}
+.sidebar{width:250px;min-width:250px;background:var(--bg-sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+
+/* Sidebar */
+.sidebar-header{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.sidebar-header svg{flex-shrink:0}
+.sidebar-title{font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap}
+.sidebar-subtitle{font-size:10px;color:var(--text-secondary);margin-top:1px}
+.sidebar-section-label{padding:8px 14px 4px;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-secondary);letter-spacing:.8px}
+.session-list{flex:1;overflow-y:auto;padding:4px 0}
+.session-item{padding:8px 14px;cursor:pointer;border-left:2px solid transparent;transition:background .15s}
+.session-item:hover{background:var(--bg-hover)}
+.session-item.active{background:rgba(9,71,113,.4);border-left-color:var(--border-active)}
+.session-top{display:flex;align-items:center;gap:6px}
+.session-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.session-dot.live{background:var(--green-bright);box-shadow:0 0 4px var(--green-bright)}
+.session-dot.ended{background:var(--gray-dim)}
+.session-name{font-size:12px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.session-meta{display:flex;justify-content:space-between;align-items:center;margin-top:3px;padding-left:13px}
+.session-path{font-size:10px;color:var(--text-secondary);font-family:var(--font-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+.session-time{font-size:10px;color:var(--text-secondary);white-space:nowrap;flex-shrink:0;margin-left:6px}
+
+/* Header */
+.header{height:36px;min-height:36px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px}
+.breadcrumb{font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:4px;flex-shrink:0}
+.breadcrumb span{color:var(--text-accent);cursor:pointer}
+.breadcrumb span:hover{text-decoration:underline}
+.bc-sep{color:var(--gray-dim)}
+.status-live{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--green-bright);flex-shrink:0}
+.status-live .dot{width:7px;height:7px;border-radius:50%;background:var(--green-bright);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 3px var(--green-bright)}50%{opacity:.4;box-shadow:none}}
+.header-spacer{flex:1}
+.search-bar{width:220px;height:24px;background:var(--bg-input);border:1px solid var(--border);border-radius:4px;padding:0 8px;color:var(--text-primary);font-size:11px;font-family:var(--font-sans);outline:none}
+.search-bar:focus{border-color:var(--border-active)}
+.search-bar::placeholder{color:var(--text-secondary)}
+
+/* Panels */
+.content{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.event-panel{flex:6;display:flex;flex-direction:column;overflow:hidden;border-bottom:1px solid var(--border)}
+.detail-panel{flex:4;display:flex;flex-direction:column;overflow:hidden}
+
+/* Event Stream */
+.event-panel-header{height:28px;min-height:28px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 12px;font-size:11px;color:var(--text-secondary);gap:8px}
+.event-panel-header .title{font-weight:600;color:var(--text-primary)}
+.event-count{background:var(--bg-input);padding:1px 6px;border-radius:8px;font-size:10px}
+.event-stream{flex:1;overflow-y:auto;font-family:var(--font-mono);font-size:12px}
+.event-row{display:flex;align-items:flex-start;padding:3px 12px;border-bottom:1px solid rgba(60,60,60,.3);cursor:pointer;transition:background .1s;opacity:0;transform:translateY(6px);animation:fadeSlideIn .3s forwards}
+@keyframes fadeSlideIn{to{opacity:1;transform:translateY(0)}}
+.event-row:hover{background:var(--bg-hover)}
+.event-row.expanded{background:rgba(9,71,113,.15)}
+.event-ts{color:var(--text-secondary);width:100px;flex-shrink:0;font-size:11px}
+.event-badge{padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;min-width:130px;max-width:160px;text-align:center;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.event-desc{margin-left:10px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.event-desc .check{color:var(--green-bright)}
+.event-expand-icon{margin-left:auto;color:var(--text-secondary);font-size:10px;padding-left:8px;flex-shrink:0;user-select:none}
+.event-detail{display:none;padding:4px 12px 8px 112px;font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);white-space:pre;overflow-x:auto;background:rgba(0,0,0,.15);border-bottom:1px solid rgba(60,60,60,.3)}
+.event-detail.show{display:block}
+.event-detail .json-key{color:var(--cyan)}
+.event-detail .json-str{color:var(--orange)}
+.event-detail .json-num{color:var(--green)}
+.event-detail .json-bool{color:var(--blue)}
+
+/* Badge colors */
+.badge-session{background:rgba(86,156,214,.18);color:var(--blue)}
+.badge-user{background:rgba(78,201,176,.18);color:var(--green)}
+.badge-assistant{background:rgba(197,134,192,.18);color:var(--purple)}
+.badge-tool{background:rgba(206,145,120,.18);color:var(--orange)}
+.badge-subagent{background:rgba(156,220,254,.18);color:var(--cyan)}
+.badge-hook{background:rgba(106,106,106,.18);color:var(--gray-dim)}
+.badge-error{background:rgba(244,71,71,.18);color:var(--red)}
+
+/* Detail Panel */
+.tab-bar{height:32px;min-height:32px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:stretch}
+.tab{padding:0 16px;font-size:12px;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;border-bottom:2px solid transparent;transition:color .15s}
+.tab:hover{color:var(--text-primary)}
+.tab.active{color:var(--text-primary);border-bottom-color:var(--border-active)}
+.tab-content{flex:1;overflow-y:auto;padding:16px}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* Statistics */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:20px}
+.stat-card{background:var(--bg-main);border:1px solid var(--border);border-radius:6px;padding:12px 14px}
+.stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-secondary);margin-bottom:4px}
+.stat-value{font-size:20px;font-weight:600;font-family:var(--font-mono);color:var(--text-primary)}
+.stat-value.accent{color:var(--text-accent)}
+.stat-value.green{color:var(--green-bright)}
+
+.chart-section{margin-top:8px}
+.chart-title{font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px}
+.bar-chart{display:flex;flex-direction:column;gap:6px}
+.bar-row{display:flex;align-items:center;gap:10px}
+.bar-label{font-size:11px;color:var(--text-secondary);width:100px;text-align:right;font-family:var(--font-mono);flex-shrink:0}
+.bar-track{flex:1;height:16px;background:var(--bg-main);border-radius:3px;overflow:hidden;position:relative}
+.bar-fill{height:100%;border-radius:3px;transition:width 1.5s cubic-bezier(.22,.61,.36,1)}
+.bar-amount{font-size:10px;color:var(--text-secondary);width:70px;font-family:var(--font-mono);flex-shrink:0}
+
+/* Tree View */
+.tree{font-family:var(--font-mono);font-size:12px}
+.tree-node{padding:2px 0 2px 0}
+.tree-row{display:flex;align-items:center;gap:4px;padding:2px 6px;cursor:pointer;border-radius:3px}
+.tree-row:hover{background:var(--bg-hover)}
+.tree-toggle{width:16px;text-align:center;color:var(--text-secondary);font-size:10px;flex-shrink:0;user-select:none}
+.tree-icon{flex-shrink:0;font-size:11px}
+.tree-text{color:var(--text-primary)}
+.tree-text.muted{color:var(--text-secondary)}
+.tree-children{padding-left:16px}
+.tree-children.collapsed{display:none}
+
+/* Raw JSON */
+.raw-json{font-family:var(--font-mono);font-size:11px;white-space:pre;color:var(--text-secondary);line-height:1.5}
+.raw-json .json-key{color:var(--cyan)}
+.raw-json .json-str{color:var(--orange)}
+.raw-json .json-num{color:var(--green)}
+.raw-json .json-bool{color:var(--blue)}
+.raw-json .json-null{color:var(--gray-dim)}
+
+/* Resize handle */
+.resize-handle{height:3px;background:transparent;cursor:ns-resize;position:relative}
+.resize-handle:hover,.resize-handle:active{background:var(--border-active)}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2z" fill="#333"/>
+        <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-.5 4.5a1.5 1.5 0 0 1 2.838.68l-.338 2.82h2.5a1 1 0 0 1 .928 1.371l-2.5 6a1 1 0 0 1-.928.629H10a1 1 0 0 1-1-1v-4.5a1 1 0 0 1 1-1h1.08l.42-3.5a1.5 1.5 0 0 1 0-1.5z" fill="#569cd6"/>
+        <circle cx="9" cy="10" r="1.5" fill="#4ec9b0"/>
+        <circle cx="15" cy="10" r="1.5" fill="#4ec9b0"/>
+        <path d="M8.5 14.5c0 0 1.5 2 3.5 2s3.5-2 3.5-2" stroke="#4ec9b0" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+      </svg>
+      <div>
+        <div class="sidebar-title">Copilot Reader</div>
+        <div class="sidebar-subtitle">Session Explorer</div>
+      </div>
+    </div>
+    <div class="sidebar-section-label">Sessions</div>
+    <div class="session-list" id="sessionList"></div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Header -->
+    <div class="header">
+      <div class="breadcrumb">
+        <span>Sessions</span><span class="bc-sep">›</span>
+        <span>c753e394…</span><span class="bc-sep">›</span>
+        <span style="color:var(--text-primary)">Events</span>
+      </div>
+      <div class="status-live"><div class="dot"></div>LIVE</div>
+      <div class="header-spacer"></div>
+      <input class="search-bar" type="text" placeholder="Search events… (⌘K)">
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <!-- Event Stream -->
+      <div class="event-panel">
+        <div class="event-panel-header">
+          <span class="title">Event Stream</span>
+          <span class="event-count" id="eventCount">0</span>
+          <span style="margin-left:auto;font-size:10px">Auto-scroll ✓</span>
+        </div>
+        <div class="event-stream" id="eventStream"></div>
+      </div>
+
+      <div class="resize-handle"></div>
+
+      <!-- Detail Panel -->
+      <div class="detail-panel">
+        <div class="tab-bar">
+          <div class="tab active" data-tab="statistics">Statistics</div>
+          <div class="tab" data-tab="tree">Tree View</div>
+          <div class="tab" data-tab="raw">Raw JSON</div>
+        </div>
+        <div class="tab-content">
+          <!-- Statistics Tab -->
+          <div class="tab-pane active" id="tab-statistics">
+            <div class="stat-grid" id="statGrid"></div>
+            <div class="chart-section">
+              <div class="chart-title">Token Usage by Category</div>
+              <div class="bar-chart" id="barChart"></div>
+            </div>
+          </div>
+          <!-- Tree View Tab -->
+          <div class="tab-pane" id="tab-tree">
+            <div class="tree" id="treeView"></div>
+          </div>
+          <!-- Raw JSON Tab -->
+          <div class="tab-pane" id="tab-raw">
+            <div class="raw-json" id="rawJson"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// === DATA ===
+const sessions = [
+  { name:"Copilot Session Log Explorer", path:"~/sandbox/Copilot_Reader", time:"2 min ago", live:true },
+  { name:"Investigate Hand Display Bug", path:"~/sandbox/minecraft-freelance", time:"12 min ago", live:true },
+  { name:"Investigate Hand Visibility Issue", path:"~/sandbox/minecraft-freelance", time:"13h ago", live:false },
+  { name:"Install Blender 5.1.0", path:"~/Загрузки", time:"23h ago", live:false },
+  { name:"Create Hollow Box In Blender", path:"~/Загрузки", time:"23h ago", live:false },
+  { name:"Fix CI Pipeline Tests", path:"~/work/backend-api", time:"2d ago", live:false },
+];
+
+const events = [
+  { ts:"16:31:41.820", type:"session.start",           badge:"session",   desc:'Session started (v1.0.12) — /sandbox/minecraft-freelance', expandable:true,
+    detail:{ session_id:"c753e394-a1b7-4e3f-9d2c-8f1a6b3e7d04", version:"1.0.12", cwd:"/home/zverev/sandbox/minecraft-freelance", pid:48291, node_version:"v22.11.0" }},
+  { ts:"16:40:13.299", type:"subagent.selected",        badge:"subagent",  desc:'Routing to gem-orchestrator' },
+  { ts:"16:40:17.445", type:"user.message",             badge:"user",      desc:'"Fleet deployed: Start full Gem Team workflow..."', expandable:true,
+    detail:{ role:"user", content:"Fleet deployed: Start full Gem Team workflow for the Copilot Reader project. Research the JSONL session format, plan the architecture, and implement the core parser.", turn_index:0, token_count:847 }},
+  { ts:"16:40:17.477", type:"assistant.turn_start",     badge:"assistant", desc:'Turn #0 started' },
+  { ts:"16:40:51.486", type:"assistant.message",        badge:"assistant", desc:'Planning research phase… [4 tool calls]' },
+  { ts:"16:40:51.487", type:"tool.execution_start",     badge:"tool",      desc:'report_intent → "Researching session data"' },
+  { ts:"16:40:51.487", type:"tool.execution_start",     badge:"tool",      desc:'sql → SELECT id, title, status FROM todos…' },
+  { ts:"16:40:51.487", type:"tool.execution_start",     badge:"tool",      desc:'task → gem-researcher: "Research JSONL structure"' },
+  { ts:"16:40:51.487", type:"tool.execution_start",     badge:"tool",      desc:'task → gem-researcher: "Research session detection"' },
+  { ts:"16:40:51.489", type:"tool.execution_complete",  badge:"tool",      desc:'report_intent → <span class="check">✓</span> Intent logged', expandable:true,
+    detail:{ tool:"report_intent", duration_ms:2, result:{ intent:"Researching session data", status:"ok" }}},
+  { ts:"16:40:51.490", type:"tool.execution_complete",  badge:"tool",      desc:'sql → 0 rows returned' },
+  { ts:"16:40:51.491", type:"tool.execution_complete",  badge:"tool",      desc:'task → Agent started (research-jsonl-structure)' },
+  { ts:"16:40:51.491", type:"tool.execution_complete",  badge:"tool",      desc:'task → Agent started (research-session-detection)' },
+  { ts:"16:42:15.000", type:"subagent.completed",       badge:"subagent",  desc:'research-session-detection <span class="check">✓</span>' },
+  { ts:"16:43:30.000", type:"subagent.completed",       badge:"subagent",  desc:'research-jsonl-structure <span class="check">✓</span>' },
+];
+
+const stats = [
+  { label:"Model",           value:"claude-opus-4.6", cls:"accent" },
+  { label:"Duration",        value:"12m 34s",         cls:"" },
+  { label:"Tokens In",       value:"1,598,021",       cls:"",    countTo:1598021 },
+  { label:"Tokens Out",      value:"22,702",          cls:"",    countTo:22702 },
+  { label:"Cache Read",      value:"1,221,746",       cls:"",    countTo:1221746 },
+  { label:"Premium Requests",value:"3",               cls:"green", countTo:3 },
+  { label:"Files Modified",  value:"0",               cls:"" },
+  { label:"Lines Added",     value:"184",             cls:"green", countTo:184 },
+];
+
+const barData = [
+  { label:"Input",      amount:"1,598,021", pct:100, color:"var(--blue)" },
+  { label:"Cache Read", amount:"1,221,746", pct:76,  color:"var(--green)" },
+  { label:"Output",     amount:"22,702",    pct:1.4, color:"var(--purple)" },
+  { label:"Cache Write", amount:"354,573",  pct:22,  color:"var(--orange)" },
+];
+
+const sessionJson = {
+  session_id: "c753e394-a1b7-4e3f-9d2c-8f1a6b3e7d04",
+  version: "1.0.12",
+  status: "active",
+  model: "claude-opus-4.6",
+  cwd: "/home/zverev/sandbox/minecraft-freelance",
+  started_at: "2025-07-16T16:31:41.820Z",
+  duration_seconds: 754,
+  metrics: {
+    input_tokens: 1598021,
+    output_tokens: 22702,
+    cache_read_tokens: 1221746,
+    cache_write_tokens: 354573,
+    premium_requests: 3,
+    total_events: 15
+  },
+  files_modified: [],
+  lines_added: 184,
+  lines_removed: 0
+};
+
+// === RENDER SESSIONS ===
+const sessionList = document.getElementById('sessionList');
+sessions.forEach((s, i) => {
+  const el = document.createElement('div');
+  el.className = 'session-item' + (i === 0 ? ' active' : '');
+  el.innerHTML = `
+    <div class="session-top">
+      <div class="session-dot ${s.live ? 'live' : 'ended'}"></div>
+      <div class="session-name">${esc(s.name)}</div>
+    </div>
+    <div class="session-meta">
+      <div class="session-path">${esc(s.path)}</div>
+      <div class="session-time">${esc(s.time)}</div>
+    </div>`;
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.session-item').forEach(x => x.classList.remove('active'));
+    el.classList.add('active');
+  });
+  sessionList.appendChild(el);
+});
+
+// === RENDER EVENTS (animated) ===
+const eventStream = document.getElementById('eventStream');
+const eventCountEl = document.getElementById('eventCount');
+let eventIndex = 0;
+
+function addEvent() {
+  if (eventIndex >= events.length) return;
+  const ev = events[eventIndex];
+  const row = document.createElement('div');
+  row.className = 'event-row';
+  row.innerHTML = `
+    <span class="event-ts">${esc(ev.ts)}</span>
+    <span class="event-badge badge-${ev.badge}">${esc(ev.type)}</span>
+    <span class="event-desc">${ev.desc}</span>
+    ${ev.expandable ? '<span class="event-expand-icon">▶</span>' : ''}`;
+
+  let detailEl = null;
+  if (ev.expandable) {
+    detailEl = document.createElement('div');
+    detailEl.className = 'event-detail';
+    detailEl.innerHTML = syntaxHighlight(JSON.stringify(ev.detail, null, 2));
+  }
+
+  row.addEventListener('click', () => {
+    if (!detailEl) return;
+    const open = detailEl.classList.toggle('show');
+    row.classList.toggle('expanded', open);
+    row.querySelector('.event-expand-icon').textContent = open ? '▼' : '▶';
+  });
+
+  eventStream.appendChild(row);
+  if (detailEl) eventStream.appendChild(detailEl);
+
+  eventIndex++;
+  eventCountEl.textContent = eventIndex;
+  eventStream.scrollTop = eventStream.scrollHeight;
+
+  // Auto-expand first 2 expandable rows after render
+  if (ev.expandable && eventIndex <= 3) {
+    setTimeout(() => row.click(), 100);
+  }
+}
+
+const eventTimer = setInterval(() => {
+  addEvent();
+  if (eventIndex >= events.length) clearInterval(eventTimer);
+}, 800);
+
+// === RENDER STATISTICS ===
+const statGrid = document.getElementById('statGrid');
+stats.forEach(s => {
+  const card = document.createElement('div');
+  card.className = 'stat-card';
+  const valCls = s.cls ? ' ' + s.cls : '';
+  card.innerHTML = `<div class="stat-label">${esc(s.label)}</div><div class="stat-value${valCls}" data-count-to="${s.countTo || ''}" data-final="${esc(s.value)}">${s.countTo ? '0' : esc(s.value)}</div>`;
+  statGrid.appendChild(card);
+});
+
+// Count-up animation
+setTimeout(() => {
+  document.querySelectorAll('[data-count-to]').forEach(el => {
+    const target = parseInt(el.dataset.countTo);
+    if (!target) return;
+    const final = el.dataset.final;
+    const duration = 1200;
+    const start = performance.now();
+    function tick(now) {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = Math.round(target * eased);
+      el.textContent = current.toLocaleString();
+      if (progress < 1) requestAnimationFrame(tick);
+      else el.textContent = final;
+    }
+    requestAnimationFrame(tick);
+  });
+}, 300);
+
+// Bar chart
+const barChart = document.getElementById('barChart');
+barData.forEach((b, i) => {
+  const row = document.createElement('div');
+  row.className = 'bar-row';
+  row.innerHTML = `
+    <span class="bar-label">${esc(b.label)}</span>
+    <div class="bar-track"><div class="bar-fill" style="width:0%;background:${b.color}"></div></div>
+    <span class="bar-amount">${esc(b.amount)}</span>`;
+  barChart.appendChild(row);
+  setTimeout(() => {
+    row.querySelector('.bar-fill').style.width = Math.max(b.pct, 2) + '%';
+  }, 400 + i * 150);
+});
+
+// === TREE VIEW ===
+document.getElementById('treeView').innerHTML = `
+<div class="tree-node">
+  <div class="tree-row" onclick="toggleTree(this)">
+    <span class="tree-toggle">▼</span>
+    <span class="tree-icon">📁</span>
+    <span class="tree-text">session c753e394</span>
+    <span class="tree-text muted" style="margin-left:auto;font-size:10px">15 events</span>
+  </div>
+  <div class="tree-children">
+    <div class="tree-node">
+      <div class="tree-row" onclick="toggleTree(this)">
+        <span class="tree-toggle">▼</span>
+        <span class="tree-icon">🔷</span>
+        <span class="tree-text">turn #0</span>
+        <span class="tree-text muted" style="margin-left:auto;font-size:10px">12 events</span>
+      </div>
+      <div class="tree-children">
+        <div class="tree-node"><div class="tree-row"><span class="tree-toggle"></span><span class="tree-icon">💬</span><span class="tree-text">user.message</span><span class="tree-text muted" style="margin-left:auto;font-size:10px">"Fleet deployed…"</span></div></div>
+        <div class="tree-node"><div class="tree-row"><span class="tree-toggle"></span><span class="tree-icon">🤖</span><span class="tree-text">assistant.turn_start</span></div></div>
+        <div class="tree-node">
+          <div class="tree-row" onclick="toggleTree(this)">
+            <span class="tree-toggle">▼</span>
+            <span class="tree-icon">🤖</span>
+            <span class="tree-text">assistant.message</span>
+            <span class="tree-text muted" style="margin-left:auto;font-size:10px">4 tool calls</span>
+          </div>
+          <div class="tree-children">
+            <div class="tree-node"><div class="tree-row"><span class="tree-toggle"></span><span class="tree-icon">🔧</span><span class="tree-text" style="color:var(--orange)">report_intent</span><span class="tree-text muted" style="margin-left:auto;font-size:10px">2ms</span></div></div>
+            <div class="tree-node"><div class="tree-row"><span class="tree-toggle"></span><span class="tree-icon">🔧</span><span class="tree-text" style="color:var(--orange)">sql</span><span class="tree-text muted" style="margin-left:auto;font-size:10px">3ms</span></div></div>
+            <div class="tree-node"><div class="tree-row"><span class="tree-toggle"></span><span class="tree-icon">🔧</span><span class="tree-text" style="color:var(--cyan)">task → gem-researcher</span><span class="tree-text muted" style="margin-left:auto;font-size:10px">1m 24s</span></div></div>
+            <div class="tree-node"><div class="tree-row"><span class="tree-toggle"></span><span class="tree-icon">🔧</span><span class="tree-text" style="color:var(--cyan)">task → gem-researcher</span><span class="tree-text muted" style="margin-left:auto;font-size:10px">2m 39s</span></div></div>
+          </div>
+        </div>
+        <div class="tree-node"><div class="tree-row"><span class="tree-toggle"></span><span class="tree-icon">✅</span><span class="tree-text" style="color:var(--cyan)">subagent.completed</span><span class="tree-text muted" style="margin-left:auto;font-size:10px">research-session-detection</span></div></div>
+        <div class="tree-node"><div class="tree-row"><span class="tree-toggle"></span><span class="tree-icon">✅</span><span class="tree-text" style="color:var(--cyan)">subagent.completed</span><span class="tree-text muted" style="margin-left:auto;font-size:10px">research-jsonl-structure</span></div></div>
+      </div>
+    </div>
+    <div class="tree-node">
+      <div class="tree-row"><span class="tree-toggle"></span><span class="tree-icon">🔷</span><span class="tree-text muted">session.start</span></div>
+    </div>
+    <div class="tree-node">
+      <div class="tree-row"><span class="tree-toggle"></span><span class="tree-icon">🔀</span><span class="tree-text muted">subagent.selected → gem-orchestrator</span></div>
+    </div>
+  </div>
+</div>`;
+
+function toggleTree(rowEl) {
+  const children = rowEl.parentElement.querySelector('.tree-children');
+  if (!children) return;
+  const collapsed = children.classList.toggle('collapsed');
+  rowEl.querySelector('.tree-toggle').textContent = collapsed ? '▶' : '▼';
+}
+
+// === RAW JSON ===
+document.getElementById('rawJson').innerHTML = syntaxHighlight(JSON.stringify(sessionJson, null, 2));
+
+// === TABS ===
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// === HELPERS ===
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function syntaxHighlight(json) {
+  return json.replace(/("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function(match) {
+    let cls = 'json-num';
+    if (/^"/.test(match)) {
+      cls = /:$/.test(match) ? 'json-key' : 'json-str';
+    } else if (/true|false/.test(match)) {
+      cls = 'json-bool';
+    } else if (/null/.test(match)) {
+      cls = 'json-null';
+    }
+    return '<span class="' + cls + '">' + match + '</span>';
+  });
+}
+</script>
+</body>
+</html>

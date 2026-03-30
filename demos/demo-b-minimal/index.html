@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Copilot Reader — Minimalist Dark</title>
+<style>
+/* ── Reset & Base ─────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;
+  background:#0a0a0a;color:#fafafa;overflow:hidden;height:100vh;display:flex;
+}
+/* Hide scrollbars globally */
+::-webkit-scrollbar{display:none}
+*{scrollbar-width:none;-ms-overflow-style:none}
+
+/* ── Sidebar ──────────────────────────────────────────── */
+.sidebar{
+  width:280px;min-width:280px;height:100vh;background:#111111;
+  border-right:1px solid #27272a;display:flex;flex-direction:column;
+  padding:20px 16px;gap:16px;overflow-y:auto;
+}
+.app-title{
+  font-size:18px;font-weight:700;letter-spacing:-0.3px;
+  background:linear-gradient(135deg,#ffffff 30%,#60A5FA 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;padding:4px 0;
+}
+.search-box{
+  position:relative;
+}
+.search-box input{
+  width:100%;padding:10px 12px 10px 36px;border-radius:10px;border:1px solid #27272a;
+  background:rgba(255,255,255,0.04);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  color:#fafafa;font-size:13px;outline:none;transition:border-color .2s ease,background .2s ease;
+}
+.search-box input::placeholder{color:#52525b}
+.search-box input:focus{border-color:#3f3f46;background:rgba(255,255,255,0.07)}
+.search-box .search-icon{
+  position:absolute;left:12px;top:50%;transform:translateY(-50%);
+  color:#52525b;font-size:14px;pointer-events:none;
+}
+
+.session-list{display:flex;flex-direction:column;gap:6px;flex:1;overflow-y:auto}
+
+.session-card{
+  padding:12px 14px;border-radius:12px;cursor:pointer;
+  background:#161616;border:1px solid transparent;
+  transition:background .2s ease,border-color .2s ease,box-shadow .2s ease,transform .2s ease;
+  position:relative;
+}
+.session-card:hover{
+  background:#1a1a1a;box-shadow:0 2px 8px rgba(0,0,0,0.3);transform:translateY(-1px);
+}
+.session-card.selected{background:#1c1c1e;border-color:#27272a}
+.session-card.active{border-left:3px solid #34D399}
+
+.session-card .session-name{
+  font-size:13px;font-weight:600;color:#e4e4e7;display:flex;align-items:center;gap:6px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.session-card .session-path{font-size:11px;color:#52525b;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-card .session-time{font-size:11px;color:#3f3f46;margin-top:4px}
+
+.pulse-dot{
+  width:7px;height:7px;border-radius:50%;background:#34D399;flex-shrink:0;
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{
+  0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(52,211,153,.4)}
+  50%{opacity:.7;box-shadow:0 0 0 4px rgba(52,211,153,0)}
+}
+
+/* ── Main ─────────────────────────────────────────────── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+/* Top Bar */
+.top-bar{
+  padding:16px 28px;border-bottom:1px solid #27272a;display:flex;
+  align-items:center;gap:16px;flex-shrink:0;background:#0a0a0a;
+  position:sticky;top:0;z-index:10;
+}
+.top-bar .session-title{font-size:18px;font-weight:700;letter-spacing:-0.3px;color:#fafafa}
+.pill{
+  padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;
+  display:inline-flex;align-items:center;gap:5px;
+}
+.pill-live{background:rgba(52,211,153,0.12);color:#34D399;animation:pill-pulse 2.5s ease-in-out infinite}
+@keyframes pill-pulse{0%,100%{opacity:1}50%{opacity:.7}}
+.pill-ended{background:rgba(113,113,122,0.15);color:#71717a}
+.pill-model{background:rgba(167,139,250,0.1);color:#A78BFA;border:1px solid rgba(167,139,250,0.15);font-size:11px}
+.top-bar-right{margin-left:auto;display:flex;align-items:center;gap:16px}
+.top-bar-stat{font-size:13px;color:#71717a;display:flex;align-items:center;gap:5px}
+.top-bar-stat span{color:#a1a1aa;font-weight:500}
+
+/* ── Content Scroll ───────────────────────────────────── */
+.content{flex:1;overflow-y:auto;padding:24px 28px 40px}
+
+/* ── Stats Row ────────────────────────────────────────── */
+.stats-row{
+  display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:28px;
+}
+.stat-card{
+  background:#161616;border:1px solid #1e1e1e;border-radius:12px;padding:16px 18px;
+  transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease;
+}
+.stat-card:hover{border-color:#27272a;transform:scale(1.01);box-shadow:0 2px 8px rgba(0,0,0,0.25)}
+.stat-label{font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;display:flex;align-items:center;gap:5px}
+.stat-label .stat-icon{font-size:13px}
+.stat-value{font-size:22px;font-weight:600;color:#fafafa;letter-spacing:-0.5px}
+.stat-suffix{font-size:12px;color:#52525b;margin-left:3px;font-weight:400}
+
+/* ── Timeline Section ─────────────────────────────────── */
+.timeline-header{
+  font-size:13px;font-weight:600;color:#71717a;text-transform:uppercase;
+  letter-spacing:0.5px;margin-bottom:16px;
+}
+.timeline{position:relative;display:flex;flex-direction:column;gap:0}
+.timeline::before{
+  content:'';position:absolute;left:15px;top:8px;bottom:8px;
+  width:2px;background:#1e1e1e;border-radius:1px;
+}
+
+/* Timeline Entry */
+.tl-entry{
+  position:relative;padding-left:44px;padding-bottom:8px;
+  opacity:0;transform:translateY(12px);
+}
+.tl-entry.visible{
+  opacity:1;transform:translateY(0);
+  transition:opacity .5s ease,transform .5s ease;
+}
+.tl-dot{
+  position:absolute;left:10px;top:16px;width:12px;height:12px;border-radius:50%;
+  border:2px solid #27272a;background:#0a0a0a;z-index:2;
+}
+
+.tl-card{
+  background:#161616;border:1px solid #1e1e1e;border-radius:12px;padding:16px 18px;
+  transition:border-color .2s ease,box-shadow .2s ease;
+}
+.tl-card:hover{border-color:#27272a;box-shadow:0 1px 6px rgba(0,0,0,0.2)}
+
+.tl-card-header{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.tl-badge{
+  padding:2px 8px;border-radius:8px;font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.3px;
+}
+.tl-time{font-size:11px;color:#3f3f46;margin-left:auto;flex-shrink:0}
+.tl-desc{font-size:13px;color:#d4d4d8;line-height:1.5}
+.tl-desc-muted{color:#71717a}
+
+/* Badge Colors */
+.badge-session{background:rgba(96,165,250,0.1);color:#60A5FA}
+.badge-user{background:rgba(52,211,153,0.1);color:#34D399}
+.badge-assistant{background:rgba(167,139,250,0.1);color:#A78BFA}
+.badge-tool{background:rgba(251,191,36,0.1);color:#FBBF24}
+.badge-subagent{background:rgba(34,211,238,0.1);color:#22D3EE}
+.badge-error{background:rgba(248,113,113,0.1);color:#F87171}
+
+/* Dot colors match badges */
+.dot-session{border-color:#60A5FA;background:rgba(96,165,250,0.2)}
+.dot-user{border-color:#34D399;background:rgba(52,211,153,0.2)}
+.dot-assistant{border-color:#A78BFA;background:rgba(167,139,250,0.2)}
+.dot-tool{border-color:#FBBF24;background:rgba(251,191,36,0.2)}
+.dot-subagent{border-color:#22D3EE;background:rgba(34,211,238,0.2)}
+.dot-error{border-color:#F87171;background:rgba(248,113,113,0.2)}
+
+/* Tool calls sub-items */
+.tl-tools{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.tool-item{
+  display:flex;align-items:flex-start;gap:8px;padding:8px 12px;
+  background:#111111;border-radius:8px;font-size:12px;border:1px solid #1a1a1a;
+}
+.tool-connector{
+  color:#27272a;font-size:12px;flex-shrink:0;margin-top:1px;font-family:monospace;
+}
+.tool-name{color:#FBBF24;font-weight:600;white-space:nowrap}
+.tool-arrow{color:#3f3f46;margin:0 4px;flex-shrink:0}
+.tool-result{color:#71717a;flex:1;min-width:0}
+.tool-result .success{color:#34D399}
+.tool-result .running{color:#60A5FA}
+.tool-time{color:#3f3f46;font-size:11px;flex-shrink:0;margin-left:8px}
+
+/* Expandable details */
+.tl-expand-btn{
+  margin-top:8px;font-size:11px;color:#52525b;cursor:pointer;
+  background:none;border:none;padding:4px 0;display:flex;align-items:center;gap:4px;
+  transition:color .2s ease;
+}
+.tl-expand-btn:hover{color:#71717a}
+.tl-expand-btn .chevron{transition:transform .2s ease;display:inline-block}
+.tl-expand-btn.open .chevron{transform:rotate(90deg)}
+.tl-details{
+  display:none;margin-top:8px;padding:12px;background:#111111;
+  border-radius:8px;border:1px solid #1a1a1a;
+  font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  font-size:11px;color:#71717a;line-height:1.6;white-space:pre-wrap;word-break:break-all;
+  max-height:200px;overflow-y:auto;
+}
+.tl-details.open{display:block}
+
+/* ── Responsive ───────────────────────────────────────── */
+@media(max-width:1200px){
+  .stats-row{grid-template-columns:repeat(3,1fr)}
+}
+@media(max-width:900px){
+  .sidebar{width:240px;min-width:240px}
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<!-- ── Sidebar ──────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="app-title">Copilot Reader</div>
+
+  <div class="search-box">
+    <span class="search-icon">⌕</span>
+    <input type="text" placeholder="Search sessions..." id="searchInput">
+  </div>
+
+  <div class="session-list" id="sessionList"></div>
+</aside>
+
+<!-- ── Main Area ────────────────────────────────────── -->
+<div class="main">
+  <div class="top-bar">
+    <span class="session-title" id="topTitle">Investigate Hand Display Bug</span>
+    <span class="pill pill-live" id="topStatus">● Live</span>
+    <span class="pill pill-model">claude-opus-4.6</span>
+    <div class="top-bar-right">
+      <div class="top-bar-stat">⏱ <span id="topDuration">12:34</span></div>
+      <div class="top-bar-stat">⬡ <span id="topTokens">1.6M tokens</span></div>
+    </div>
+  </div>
+
+  <div class="content" id="contentArea">
+    <div class="stats-row" id="statsRow"></div>
+    <div class="timeline-header">Event Timeline</div>
+    <div class="timeline" id="timeline"></div>
+  </div>
+</div>
+
+<script>
+/* ── Data ──────────────────────────────────────────── */
+const sessions = [
+  {name:"Copilot Session Log Explorer", path:"~/sandbox/Copilot_Reader", active:true, time:"2 min ago", selected:false},
+  {name:"Investigate Hand Display Bug", path:"~/sandbox/minecraft-freelance", active:true, time:"12 min ago", selected:true},
+  {name:"Investigate Hand Visibility Issue", path:"~/sandbox/minecraft-freelance", active:false, time:"13h ago"},
+  {name:"Install Blender 5.1.0", path:"~/Загрузки", active:false, time:"23h ago"},
+  {name:"Create Hollow Box In Blender", path:"~/Загрузки", active:false, time:"23h ago"},
+  {name:"Fix CI Pipeline Tests", path:"~/work/backend-api", active:false, time:"2d ago"},
+];
+
+const stats = [
+  {label:"Input Tokens", value:1598021, icon:"↑", format:"number"},
+  {label:"Output Tokens", value:22702, icon:"↑", format:"number"},
+  {label:"Cache Hits", value:1221746, icon:"⚡", format:"number"},
+  {label:"Premium Requests", value:3, icon:"★", format:"plain"},
+  {label:"Duration", value:754, icon:"⏱", format:"duration"},
+  {label:"Files Changed", value:0, icon:"◎", format:"plain"},
+];
+
+const events = [
+  {
+    type:"session", badge:"Session", time:"16:31:41",
+    desc:"Session started — <span class='tl-desc-muted'>v1.0.12</span>",
+    details:'{\n  "version": "1.0.12",\n  "cwd": "/sandbox/minecraft-freelance",\n  "sessionId": "f7a3b2c1-9e4d-4f8a-b6c5-d2e1f0a9b8c7",\n  "machineId": "ab12cd34"\n}'
+  },
+  {
+    type:"session", badge:"Routing", time:"16:40:13",
+    desc:"Agent routing completed — selected <strong>gem-orchestrator</strong>",
+    details:'{\n  "routing_decision": "gem-orchestrator",\n  "confidence": 0.94,\n  "alternatives": ["gem-implementer", "gem-researcher"]\n}'
+  },
+  {
+    type:"user", badge:"User Message", time:"16:40:17",
+    desc:'"Fleet deployed: Start full Gem Team workflow…"',
+    expandText:"Fleet deployed: Start full Gem Team workflow for investigating the hand display bug in the Minecraft freelance project. Research the codebase, identify the root cause of the rendering issue, plan the fix, implement it with tests, and verify the solution works correctly.",
+  },
+  {
+    type:"assistant", badge:"Assistant", time:"16:40:51",
+    desc:"Planning research phase — dispatching parallel tool calls",
+    tools:[
+      {name:"report_intent", result:'✓ "Researching session data"', status:"success", time:"0.002s"},
+      {name:"SQL query", result:"✓ 0 rows returned", status:"success", time:"0.003s"},
+      {name:"gem-researcher", result:'"Research JSONL structure"', status:"running", time:"running"},
+      {name:"gem-researcher", result:'"Research session detection"', status:"running", time:"running"},
+    ],
+    details:'{\n  "model": "claude-opus-4.6",\n  "stop_reason": "tool_use",\n  "input_tokens": 24510,\n  "output_tokens": 1847\n}'
+  },
+  {
+    type:"subagent", badge:"Sub-agent", time:"16:42:15",
+    desc:'<strong>research-session-detection</strong> completed successfully',
+    suffix:"1m 24s",
+    details:'{\n  "agent": "research-session-detection",\n  "status": "completed",\n  "duration_ms": 84230,\n  "findings": 12,\n  "files_explored": 34\n}'
+  },
+  {
+    type:"subagent", badge:"Sub-agent", time:"16:43:30",
+    desc:'<strong>research-jsonl-structure</strong> completed successfully',
+    suffix:"2m 39s",
+    details:'{\n  "agent": "research-jsonl-structure",\n  "status": "completed",\n  "duration_ms": 159400,\n  "findings": 8,\n  "files_explored": 21\n}'
+  },
+  {
+    type:"assistant", badge:"Assistant", time:"16:43:42",
+    desc:"Research synthesis complete — identified 3 potential root causes for hand rendering bug",
+    details:'{\n  "root_causes": [\n    "ModelPart visibility flag not propagated to child nodes",\n    "Hand layer rendering order conflict with held items",\n    "First-person camera transform applied before hand model matrix"\n  ]\n}'
+  },
+  {
+    type:"tool", badge:"Tool", time:"16:44:01",
+    desc:'File read — <span class="tl-desc-muted">src/client/renderer/HandRenderer.java</span> (lines 42-89)',
+    details:'// HandRenderer.java:42-89\npublic void renderHand(MatrixStack matrices, float tickDelta) {\n    if (!this.client.options.mainHand.isVisible()) return;\n    // BUG: visibility check doesn\'t account for spectator mode\n    matrices.push();\n    this.applyHandTransform(matrices, Hand.MAIN);\n    this.renderHandModel(matrices, tickDelta);\n    matrices.pop();\n}'
+  },
+  {
+    type:"assistant", badge:"Planning", time:"16:44:18",
+    desc:"Implementation plan created — 4 tasks identified with dependency graph",
+    tools:[
+      {name:"gem-planner", result:'✓ Plan created (4 tasks)', status:"success", time:"0.8s"},
+      {name:"SQL insert", result:"✓ 4 todos inserted", status:"success", time:"0.004s"},
+    ],
+  },
+  {
+    type:"tool", badge:"Tool", time:"16:45:02",
+    desc:'Running test suite — <span class="tl-desc-muted">HandRendererTest.java</span>',
+    details:'Running 12 tests...\n  ✓ testHandVisibleInSurvival (0.023s)\n  ✓ testHandHiddenInSpectator (0.018s)\n  ✓ testHandWithHeldItem (0.031s)\n  ✗ testHandInThirdPerson (0.045s) — Expected: hidden, Got: visible\n  ✓ testHandLayerOrdering (0.022s)\n  ...\n11 passed, 1 failed'
+  },
+];
+
+/* ── Render Sessions ──────────────────────────────── */
+const sessionList = document.getElementById('sessionList');
+function renderSessions(filter) {
+  sessionList.innerHTML = '';
+  const q = (filter || '').toLowerCase();
+  sessions.forEach((s, i) => {
+    if (q && !s.name.toLowerCase().includes(q) && !s.path.toLowerCase().includes(q)) return;
+    const card = document.createElement('div');
+    card.className = 'session-card' + (s.selected ? ' selected' : '') + (s.active ? ' active' : '');
+    card.innerHTML =
+      '<div class="session-name">' +
+        (s.active ? '<span class="pulse-dot"></span>' : '') +
+        escH(s.name) +
+      '</div>' +
+      '<div class="session-path">' + escH(s.path) + '</div>' +
+      '<div class="session-time">' + escH(s.time) + '</div>';
+    card.addEventListener('click', () => {
+      sessions.forEach(x => x.selected = false);
+      s.selected = true;
+      renderSessions(document.getElementById('searchInput').value);
+      document.getElementById('topTitle').textContent = s.name;
+      const st = document.getElementById('topStatus');
+      if (s.active) { st.className = 'pill pill-live'; st.textContent = '● Live'; }
+      else { st.className = 'pill pill-ended'; st.textContent = 'Ended'; }
+    });
+    sessionList.appendChild(card);
+  });
+}
+renderSessions();
+document.getElementById('searchInput').addEventListener('input', e => renderSessions(e.target.value));
+
+/* ── Render Stats ─────────────────────────────────── */
+const statsRow = document.getElementById('statsRow');
+stats.forEach(s => {
+  const card = document.createElement('div');
+  card.className = 'stat-card';
+  card.innerHTML =
+    '<div class="stat-label"><span class="stat-icon">' + s.icon + '</span> ' + escH(s.label) + '</div>' +
+    '<div class="stat-value" data-target="' + s.value + '" data-format="' + s.format + '">0</div>';
+  statsRow.appendChild(card);
+});
+
+/* Count-up animation */
+function animateCountUp() {
+  document.querySelectorAll('.stat-value').forEach(el => {
+    const target = parseInt(el.dataset.target, 10);
+    const fmt = el.dataset.format;
+    const duration = 1200;
+    const start = performance.now();
+    function tick(now) {
+      const t = Math.min((now - start) / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3);
+      const current = Math.round(target * ease);
+      el.innerHTML = formatStat(current, fmt);
+      if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  });
+}
+function formatStat(v, fmt) {
+  if (fmt === 'duration') {
+    const m = Math.floor(v / 60);
+    const s = v % 60;
+    return m + 'm ' + (s < 10 ? '0' : '') + s + 's';
+  }
+  if (fmt === 'number') {
+    if (v >= 1000000) return (v / 1000000).toFixed(1).replace(/\.0$/, '') + '<span class="stat-suffix">M</span>';
+    if (v >= 1000) return (v / 1000).toFixed(1).replace(/\.0$/, '') + '<span class="stat-suffix">K</span>';
+    return v.toLocaleString();
+  }
+  return v.toLocaleString();
+}
+setTimeout(animateCountUp, 300);
+
+/* ── Render Timeline ──────────────────────────────── */
+const timeline = document.getElementById('timeline');
+events.forEach((ev, i) => {
+  const entry = document.createElement('div');
+  entry.className = 'tl-entry';
+  entry.style.transitionDelay = (i * 0.08) + 's';
+
+  const dotClass = 'dot-' + ev.type;
+  const badgeClass = 'badge-' + ev.type;
+
+  let toolsHTML = '';
+  if (ev.tools) {
+    const connectors = ['├──','├──','├──','└──'];
+    toolsHTML = '<div class="tl-tools">';
+    ev.tools.forEach((t, ti) => {
+      const conn = ti === ev.tools.length - 1 ? '└──' : '├──';
+      const statusCls = t.status === 'success' ? 'success' : 'running';
+      toolsHTML +=
+        '<div class="tool-item">' +
+          '<span class="tool-connector">' + conn + '</span>' +
+          '<span class="tool-name">' + escH(t.name) + '</span>' +
+          '<span class="tool-arrow">→</span>' +
+          '<span class="tool-result"><span class="' + statusCls + '">' + t.result + '</span></span>' +
+          '<span class="tool-time">' + escH(t.time) + '</span>' +
+        '</div>';
+    });
+    toolsHTML += '</div>';
+  }
+
+  let expandHTML = '';
+  if (ev.expandText) {
+    expandHTML =
+      '<button class="tl-expand-btn" onclick="toggleExpand(this)">' +
+        '<span class="chevron">▸</span> Show full message' +
+      '</button>' +
+      '<div class="tl-details">' + escH(ev.expandText) + '</div>';
+  } else if (ev.details) {
+    expandHTML =
+      '<button class="tl-expand-btn" onclick="toggleExpand(this)">' +
+        '<span class="chevron">▸</span> View details' +
+      '</button>' +
+      '<div class="tl-details">' + escH(ev.details) + '</div>';
+  }
+
+  let suffixHTML = ev.suffix ? ' <span class="tl-desc-muted">— ' + escH(ev.suffix) + '</span>' : '';
+
+  entry.innerHTML =
+    '<div class="tl-dot ' + dotClass + '"></div>' +
+    '<div class="tl-card">' +
+      '<div class="tl-card-header">' +
+        '<span class="tl-badge ' + badgeClass + '">' + escH(ev.badge) + '</span>' +
+        '<span class="tl-time">' + escH(ev.time) + '</span>' +
+      '</div>' +
+      '<div class="tl-desc">' + ev.desc + suffixHTML + '</div>' +
+      toolsHTML +
+      expandHTML +
+    '</div>';
+
+  timeline.appendChild(entry);
+});
+
+/* Staggered entry animation via IntersectionObserver */
+function revealEntries() {
+  const entries = document.querySelectorAll('.tl-entry');
+  let delay = 0;
+  entries.forEach((el, i) => {
+    setTimeout(() => el.classList.add('visible'), 100 + i * 80);
+  });
+}
+setTimeout(revealEntries, 400);
+
+/* ── Expand/Collapse ──────────────────────────────── */
+function toggleExpand(btn) {
+  btn.classList.toggle('open');
+  const details = btn.nextElementSibling;
+  details.classList.toggle('open');
+}
+
+/* ── Util ─────────────────────────────────────────── */
+function escH(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>

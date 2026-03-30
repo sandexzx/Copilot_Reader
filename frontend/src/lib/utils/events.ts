@@ -1,0 +1,141 @@
+/** Event display utilities — description formatting and type-to-color mapping. */
+
+import type { Event } from '$lib/types';
+
+/** CSS color variable for each event type category. */
+const TYPE_COLOR_MAP: Record<string, string> = {
+	session: 'var(--color-session)',
+	user: 'var(--color-user)',
+	assistant: 'var(--color-assistant)',
+	tool: 'var(--color-tool)',
+	subagent: 'var(--color-subagent)',
+	hook: 'var(--color-hook)',
+	error: 'var(--color-error)',
+	abort: 'var(--color-error)'
+};
+
+/** Background tint for badge by type category. */
+const TYPE_BG_MAP: Record<string, string> = {
+	session: 'rgba(86,156,214,.18)',
+	user: 'rgba(78,201,176,.18)',
+	assistant: 'rgba(197,134,192,.18)',
+	tool: 'rgba(206,145,120,.18)',
+	subagent: 'rgba(156,220,254,.18)',
+	hook: 'rgba(106,106,106,.18)',
+	error: 'rgba(244,71,71,.18)',
+	abort: 'rgba(244,71,71,.18)'
+};
+
+export function getEventCategory(eventType: string): string {
+	return eventType.split('.')[0];
+}
+
+export function getEventColor(eventType: string): string {
+	const cat = getEventCategory(eventType);
+	return TYPE_COLOR_MAP[cat] ?? 'var(--text-secondary)';
+}
+
+export function getEventBgColor(eventType: string): string {
+	const cat = getEventCategory(eventType);
+	return TYPE_BG_MAP[cat] ?? 'rgba(106,106,106,.18)';
+}
+
+function truncate(s: string, max: number): string {
+	return s.length > max ? s.slice(0, max) + '…' : s;
+}
+
+function str(v: unknown): string {
+	return typeof v === 'string' ? v : String(v ?? '');
+}
+
+/** Build a human-readable one-line description for an event. */
+export function formatEventDescription(event: Event): string {
+	const d = event.data;
+
+	switch (event.type) {
+		case 'session.start': {
+			const version = str(d.version ?? d.copilotVersion ?? '');
+			const cwd = str(d.cwd ?? d.workingDirectory ?? '');
+			const parts: string[] = ['Session started'];
+			if (version) parts[0] += ` (v${version})`;
+			if (cwd) parts.push(`— ${cwd}`);
+			return parts.join(' ');
+		}
+		case 'session.shutdown': {
+			const dur = d.duration ?? d.duration_seconds ?? d.durationMs;
+			const pr = d.premium_requests ?? d.premiumRequests ?? 0;
+			const parts: string[] = ['Session ended'];
+			if (dur != null) parts.push(`— ${dur}s`);
+			if (pr) parts.push(`, ${pr} premium requests`);
+			return parts.join('');
+		}
+		case 'user.message': {
+			const content = str(d.content ?? d.message ?? d.text ?? '');
+			return content ? truncate(content, 100) : 'User message';
+		}
+		case 'assistant.message': {
+			const toolCalls = d.tool_calls ?? d.toolCalls;
+			if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+				return `${toolCalls.length} tool call${toolCalls.length === 1 ? '' : 's'}`;
+			}
+			const content = str(d.content ?? d.message ?? d.text ?? '');
+			return content ? truncate(content, 100) : 'Assistant response';
+		}
+		case 'tool.execution_start': {
+			const name = str(d.toolName ?? d.tool_name ?? d.name ?? '');
+			const desc = str(d.description ?? d.input ?? '');
+			if (name && desc) return `${name} → ${truncate(desc, 80)}`;
+			return name || 'Tool started';
+		}
+		case 'tool.execution_complete': {
+			const name = str(d.toolName ?? d.tool_name ?? d.name ?? '');
+			const failed = d.error || d.failed || d.exitCode;
+			return name ? `${name} ${failed ? '✗ failed' : '✓'}` : 'Tool completed';
+		}
+		case 'subagent.started': {
+			const agent = str(d.agentName ?? d.agent_name ?? d.name ?? '');
+			return agent ? `Started: ${agent}` : 'Subagent started';
+		}
+		case 'subagent.completed': {
+			const agent = str(d.agentName ?? d.agent_name ?? d.name ?? '');
+			return agent ? `${agent} ✓` : 'Subagent completed';
+		}
+		case 'abort':
+			return 'User aborted';
+		default:
+			return event.type;
+	}
+}
+
+/** Format a timestamp string to HH:MM:SS.mmm */
+export function formatTimestamp(ts: string): string {
+	try {
+		const d = new Date(ts);
+		const h = String(d.getHours()).padStart(2, '0');
+		const m = String(d.getMinutes()).padStart(2, '0');
+		const s = String(d.getSeconds()).padStart(2, '0');
+		const ms = String(d.getMilliseconds()).padStart(3, '0');
+		return `${h}:${m}:${s}.${ms}`;
+	} catch {
+		return ts;
+	}
+}
+
+/** Render JSON with basic syntax coloring as HTML spans. */
+export function colorizeJson(data: unknown): string {
+	const raw = JSON.stringify(data, null, 2);
+	if (!raw) return '';
+	return raw.replace(
+		/("(?:\\.|[^"\\])*")\s*:/g,
+		'<span class="json-key">$1</span>:'
+	).replace(
+		/:\s*("(?:\\.|[^"\\])*")/g,
+		(match, val) => match.replace(val, `<span class="json-str">${val}</span>`)
+	).replace(
+		/:\s*(\d+(?:\.\d+)?)/g,
+		(match, val) => match.replace(val, `<span class="json-num">${val}</span>`)
+	).replace(
+		/:\s*(true|false|null)/g,
+		(match, val) => match.replace(val, `<span class="json-bool">${val}</span>`)
+	);
+}

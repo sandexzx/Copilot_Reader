@@ -1,0 +1,1295 @@
+# ============================================================================
+# Copilot Reader — Implementation Plan
+# ============================================================================
+# Web-based real-time monitoring tool for GitHub Copilot CLI sessions
+# Stack: Python 3.12 + FastAPI + WebSocket | SvelteKit (Svelte 5) + Bun
+# Design: IDE-style dark theme (VS Code / GitHub Dark inspired)
+# ============================================================================
+
+meta:
+  project: Copilot Reader
+  version: "1.0"
+  created: "2026-03-30"
+  status: resumed_execution
+  last_updated: "2026-03-30"
+
+# ============================================================================
+# Execution Status
+# ============================================================================
+execution:
+  mode: resumed_session
+  resume_state: active
+  current_window:
+    label: "Resume at tasks 011 and 012"
+    active_tasks: [task-011, task-012]
+    objective: "Close statistics and tree-view gaps without changing frozen acceptance criteria."
+  completed_tasks:
+    - task-001
+    - task-002
+    - task-003
+    - task-004
+    - task-005
+    - task-006
+    - task-007
+    - task-008
+    - task-009
+    - task-010
+  ready_now:
+    - task: task-011
+      reason: "Dependencies task-005 and task-010 are satisfied; remaining work is completing the stats contract and UI surface."
+    - task: task-012
+      reason: "Dependencies task-005 and task-010 are satisfied; remaining work is enriching tree metadata and rendering it correctly."
+  ready_but_deferred:
+    - task: task-015
+      reason: "Dependencies task-005, task-006, and task-010 appear satisfied, but launch/runtime integration should wait until the 011/012 resume window stabilizes."
+  blocked:
+    - task: task-013
+      blocked_by: [task-011]
+      reason: "Design audit should review the finalized statistics surface instead of an in-flight implementation."
+    - task: task-014
+      blocked_by: [task-013]
+      reason: "Polish implementation depends on the design audit output."
+    - task: task-016
+      blocked_by: [task-015]
+      reason: "Security review should run against the final launch/runtime path, not the pre-integration state."
+    - task: task-017
+      blocked_by: [task-015]
+      reason: "Setup documentation depends on the final launch script and static serving flow."
+    - task: task-018
+      blocked_by: [task-014, task-015]
+      reason: "End-to-end validation should run after both the UI polish pass and the launch/runtime integration land."
+
+# ============================================================================
+# TL;DR
+# ============================================================================
+# Build a web app that monitors ~/.copilot/session-state/ and displays all
+# Copilot CLI operations in a beautiful IDE-style dark interface. The backend
+# (FastAPI) discovers sessions, parses events.jsonl, detects active sessions
+# via lock files, and streams events over WebSocket. The frontend (SvelteKit)
+# renders a VS Code-inspired UI with a session sidebar, real-time event stream,
+# nested tree view, and statistics panel. MVP targets: real-time streaming,
+# session list with active indicators, statistics, and tree view.
+
+# ============================================================================
+# Non-Goals (Explicitly Out of Scope for MVP)
+# ============================================================================
+non_goals:
+  - Multi-user authentication or access control
+  - Session modification or write operations (read-only tool)
+  - session.db (SQLite) parsing — only events.jsonl and workspace.yaml
+  - session-store.db (global SQLite) integration
+  - Mobile-responsive layout (desktop-first)
+  - Persistent server-side storage or caching (all derived from files)
+  - Deployment / production Docker images (local dev tool only)
+  - Internationalization (English UI only)
+  - Unit test coverage targets (focus on integration-level acceptance criteria)
+  - Keyboard shortcuts beyond basic search
+  - Export / download functionality
+  - Cost calculation (just token counts)
+
+# ============================================================================
+# Open Questions
+# ============================================================================
+open_questions:
+  - id: oq-1
+    question: "Should we watch ALL sessions or only active ones?"
+    recommendation: "Watch active sessions via inotify, load inactive on-demand via REST"
+    impact: "Affects memory usage and file descriptor count"
+    decision: "adopted"
+
+  - id: oq-2
+    question: "Frontend build: SSR or SPA mode?"
+    recommendation: "SPA (adapter-static) — no server rendering needed for a local dev tool"
+    impact: "Simplifies deployment to a single static build served by FastAPI"
+    decision: "adopted"
+
+  - id: oq-3
+    question: "File watching library: watchdog vs inotifyx vs manual polling?"
+    recommendation: "watchdog — pure Python, well-maintained, inotify on Linux, cross-platform fallback"
+    impact: "Dependency choice, affects reliability of real-time detection"
+    decision: "adopted"
+
+# ============================================================================
+# Architecture Decisions
+# ============================================================================
+architecture:
+  overview: |
+    Single-process FastAPI server serves both REST API and WebSocket connections.
+    Frontend is a SvelteKit SPA built to static files and served by FastAPI's
+    StaticFiles middleware. File watching uses watchdog (inotify on Linux).
+
+  backend:
+    entry: "backend/main.py — FastAPI app with CORS, static files, API router"
+    components:
+      - name: models
+        file: "backend/models.py"
+        responsibility: "Pydantic models for Session, Event, SessionStats, WebSocket messages"
+        interface: "Imported by all other modules"
+
+      - name: event_parser
+        file: "backend/event_parser.py"
+        responsibility: |
+          Parse events.jsonl lines into Event objects.
+          Correlate tool.execution_complete with tool.execution_start via toolCallId.
+          Build parent-child tree from parentId links.
+          Compute session statistics (tokens, duration, model, event counts).
+        interface: |
+          parse_event(line: str) -> Event
+          parse_events_file(path: Path) -> list[Event]
+          correlate_tool_names(events: list[Event]) -> list[Event]
+          build_event_tree(events: list[Event]) -> list[TreeNode]
+          compute_stats(events: list[Event]) -> SessionStats
+
+      - name: session_manager
+        file: "backend/session_manager.py"
+        responsibility: |
+          Discover all sessions in ~/.copilot/session-state/.
+          Parse workspace.yaml for metadata (id, cwd, summary, timestamps).
+          Detect active sessions via inuse.*.lock + PID validation.
+          Watch for new sessions appearing.
+        interface: |
+          discover_sessions() -> list[Session]
+          is_session_active(session_dir: Path) -> bool
+          get_session_metadata(session_dir: Path) -> Session
+          watch_sessions_dir(callback) -> None
+
+      - name: file_watcher
+        file: "backend/file_watcher.py"
+        responsibility: |
+          Watch events.jsonl of active sessions using watchdog (inotify).
+          Track file position, read only new lines on modification.
+          Emit parsed events to registered callbacks.
+          Handle file rotation/truncation gracefully.
+        interface: |
+          FileWatcher(session_dir: Path, on_event: Callback)
+          start() -> None
+          stop() -> None
+
+      - name: rest_api
+        file: "backend/api/sessions.py"
+        responsibility: "REST endpoints for session listing, details, and statistics"
+        interface: |
+          GET /api/sessions -> list[SessionSummary]
+          GET /api/sessions/{id} -> SessionDetail (metadata + events)
+          GET /api/sessions/{id}/stats -> SessionStats
+
+      - name: websocket_api
+        file: "backend/api/websocket.py"
+        responsibility: |
+          WebSocket endpoint for real-time event streaming.
+          On connect: optionally send backlog of existing events.
+          On file change: push new events to all connected clients for that session.
+        interface: |
+          WS /ws/sessions/{id}/events
+
+  frontend:
+    framework: "SvelteKit 2 + Svelte 5 (runes mode)"
+    build: "Bun, adapter-static for SPA output"
+    structure:
+      - name: layout
+        files: ["src/routes/+layout.svelte", "src/app.css"]
+        responsibility: "Root layout with sidebar + main area, CSS variables from demo-a"
+
+      - name: stores
+        files: ["src/lib/stores/sessions.ts", "src/lib/stores/events.ts", "src/lib/stores/websocket.ts"]
+        responsibility: |
+          sessions store: fetch session list, selected session, polling for updates
+          events store: current session events, append on WebSocket message
+          websocket store: manage WS connection lifecycle, reconnect logic
+
+      - name: components
+        files:
+          - "src/lib/components/SessionCard.svelte — sidebar session item"
+          - "src/lib/components/EventRow.svelte — single event in stream"
+          - "src/lib/components/EventStream.svelte — scrollable event list with auto-scroll"
+          - "src/lib/components/EventTree.svelte — nested tree view"
+          - "src/lib/components/StatCard.svelte — single statistic card"
+          - "src/lib/components/StatsPanel.svelte — statistics grid + bar charts"
+          - "src/lib/components/SearchBar.svelte — event search/filter"
+          - "src/lib/components/JsonViewer.svelte — syntax-highlighted JSON"
+
+  integration:
+    - "FastAPI serves SvelteKit build output at / via StaticFiles (fallback=True)"
+    - "API endpoints at /api/* and /ws/* are registered before static files"
+    - "CORS middleware for dev mode (Vite dev server on different port)"
+    - "start.sh launches both backend and frontend dev servers"
+
+# ============================================================================
+# Pre-Mortem Analysis
+# ============================================================================
+pre_mortem:
+  overall_risk: medium
+  critical_failures:
+    - scenario: "events.jsonl burst writes (7 events/ms) cause partial JSON line reads"
+      likelihood: high
+      impact: high
+      mitigation: |
+        Read file line-by-line, only process complete lines (ending with \n).
+        Buffer incomplete trailing data between reads.
+        Validate JSON parse before emitting events.
+
+    - scenario: "inotify watchers exhaust kernel limits with many active sessions"
+      likelihood: low
+      impact: medium
+      mitigation: |
+        Only watch active sessions (those with valid lock files).
+        Default inotify limit is 65K watches — we need ~1 per active session.
+        Typical active sessions: 1-3 at a time.
+
+    - scenario: "Large session files (8MB, 3490 lines) cause slow initial load"
+      likelihood: medium
+      impact: medium
+      mitigation: |
+        Parse events lazily or with pagination for initial load.
+        REST API returns events paginated (limit/offset).
+        Frontend virtualizes event list for large sessions.
+
+    - scenario: "tool.execution_complete missing toolName breaks tool display"
+      likelihood: high
+      impact: medium
+      mitigation: |
+        Maintain toolCallId → toolName index from tool.execution_start events.
+        On tool.execution_complete, look up toolName by toolCallId.
+        Fallback to "unknown_tool" if correlation fails.
+
+    - scenario: "Session directory deleted or moved while being watched"
+      likelihood: low
+      impact: low
+      mitigation: |
+        Watchdog handles filesystem events for deletion.
+        FileWatcher stops gracefully on file not found.
+        SessionManager removes deleted sessions from active list.
+
+  resume_window:
+    focus_tasks: [task-011, task-012]
+    downstream_watchlist: [task-015, task-016, task-018]
+    risk_level: high
+    critical_failures:
+      - task: task-011
+        scenario: "cache_write_tokens stays missing from the backend/frontend contract, so token totals look valid while silently undercounting usage"
+        likelihood: high
+        impact: high
+        mitigation: |
+          Update backend.models.SessionStats, backend.event_parser.compute_stats,
+          the stats API response, frontend types, StatsPanel, and API/parser tests
+          in one pass. Freeze the field name as cache_write_tokens end-to-end.
+
+      - task: task-011
+        scenario: "Cache Write is added to the chart but not the stat grid, loading skeleton, or expected accent colors, causing a partially correct UI that still violates the task contract"
+        likelihood: medium
+        impact: medium
+        mitigation: |
+          Treat the stat cards, chart series, and loading state as one contract.
+          Verify the card set, four-bar chart, and color expectations together
+          before handing off to design-polish work.
+
+      - task: task-012
+        scenario: "Tree rendering keeps reading tool labels from event.data.tool_name while correlated names live on event.tool_name, leaving completed tool nodes unlabeled or mislabeled"
+        likelihood: high
+        impact: high
+        mitigation: |
+          Make the tree contract explicit: prefer event.tool_name, then fall back
+          to event.data.tool_name or event.data.toolName only when necessary.
+          Add tests that cover completed tool nodes and sub-agent labels.
+
+      - task: task-012
+        scenario: "Depth and cycle protection are handled only in the UI, so pathological parentId chains still create oversized or recursive API payloads"
+        likelihood: medium
+        impact: high
+        mitigation: |
+          Enforce the depth cap and cycle guard in backend tree construction.
+          Add deep-chain and cycle fixtures so the API contract is safe before
+          the recursive Svelte renderer consumes it.
+
+      - task: task-015
+        scenario: "Static serving and start.sh are validated against a stale dev-only path before the stats/tree API contract stabilizes, forcing a second integration pass"
+        likelihood: medium
+        impact: medium
+        mitigation: |
+          Keep task-015 ready but deferred until tasks 011 and 012 exit the
+          resume window. Validate built assets against the finalized stats/tree
+          endpoints rather than the interim dev flow.
+
+      - task: task-016
+        scenario: "Security review starts before runtime routing and final response shapes settle, producing duplicate findings and re-review churn"
+        likelihood: medium
+        impact: low
+        mitigation: |
+          Keep task-016 blocked on task-015 so the reviewer sees the final UUID
+          validation, static-file precedence, and production error surface once.
+
+      - task: task-018
+        scenario: "End-to-end validation exercises only shallow fixtures, so deep tree regressions and missing Cache Write rendering slip through"
+        likelihood: medium
+        impact: high
+        mitigation: |
+          Include deep parent chains, completed tool nodes, and Cache Write stats
+          in the browser validation checklist once tasks 011 and 012 complete.
+
+  assumptions:
+    - "~/.copilot/session-state/ exists and is readable"
+    - "events.jsonl format is stable across Copilot CLI versions"
+    - "Active sessions always have inuse.*.lock files"
+    - "Lock file PID is always a valid integer"
+    - "workspace.yaml is valid YAML with at minimum: id, cwd, summary fields"
+    - "User runs the tool on the same machine where Copilot CLI sessions run"
+    - "Python 3.12, Node 22, and Bun 1.3+ are available"
+
+# ============================================================================
+# Task DAG
+# ============================================================================
+tasks:
+  # ==========================================================================
+  # PHASE 1: Foundation (parallel)
+  # ==========================================================================
+
+  - id: task-001
+    title: "Backend project scaffold with FastAPI"
+    description: |
+      Create the backend Python project structure with FastAPI, configure
+      dependencies, and verify the server starts and responds to health checks.
+      This is the foundation all backend tasks depend on.
+    agent: gem-implementer
+    priority: critical
+    effort: small
+    dependencies: []
+    context_files:
+      - "MEMORY.md"
+      - "demos/demo-a-ide/index.html"
+    acceptance_criteria:
+      - id: AC1
+        criteria: "Directory backend/ exists with files: main.py, models.py, event_parser.py, session_manager.py, file_watcher.py, api/sessions.py, api/websocket.py, api/__init__.py, requirements.txt"
+      - id: AC2
+        criteria: "requirements.txt lists: fastapi>=0.115, uvicorn[standard], pydantic>=2.0, watchdog>=4.0, pyyaml>=6.0, aiofiles"
+      - id: AC3
+        criteria: "'pip install -r backend/requirements.txt' succeeds without errors"
+      - id: AC4
+        criteria: "'python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000' starts without errors"
+      - id: AC5
+        criteria: "GET http://localhost:8000/api/health returns JSON {\"status\": \"ok\"}"
+      - id: AC6
+        criteria: "CORS middleware is configured to allow origins ['http://localhost:5173', 'http://localhost:4173']"
+      - id: AC7
+        criteria: "models.py defines Pydantic models: Event, Session, SessionSummary, SessionStats, TreeNode, WebSocketMessage"
+    constraints:
+      - "Do NOT install packages globally — use pip install with --user or venv"
+      - "Do NOT add authentication or middleware beyond CORS and health check"
+      - "Do NOT implement business logic in main.py — it only wires routers"
+    failure_modes:
+      - scenario: "Port 8000 already in use"
+        likelihood: low
+        mitigation: "Make port configurable via COPILOT_READER_PORT env var, default 8000"
+    tech_stack: ["python3.12", "fastapi", "uvicorn", "pydantic"]
+
+  - id: task-002
+    title: "Frontend project scaffold with SvelteKit + Bun"
+    description: |
+      Initialize a SvelteKit project with Svelte 5, configure Bun as the
+      package manager, set up adapter-static for SPA mode, and establish
+      the CSS variable system from the demo-a-ide design reference.
+    agent: gem-implementer
+    priority: critical
+    effort: small
+    dependencies: []
+    context_files:
+      - "demos/demo-a-ide/index.html"
+    acceptance_criteria:
+      - id: AC1
+        criteria: "Directory frontend/ exists with standard SvelteKit structure: src/routes/, src/lib/, static/, svelte.config.js, package.json, vite.config.ts"
+      - id: AC2
+        criteria: "package.json has svelte 5.x, @sveltejs/kit, @sveltejs/adapter-static as dependencies"
+      - id: AC3
+        criteria: "'cd frontend && bun install' succeeds"
+      - id: AC4
+        criteria: "'cd frontend && bun run build' produces build/ directory with index.html"
+      - id: AC5
+        criteria: "src/app.css contains all CSS custom properties from demo-a-ide (--bg-main, --bg-sidebar, --bg-panel, --text-primary, --text-secondary, --text-accent, --border, --green, --blue, --purple, --orange, --cyan, --red, --yellow, --font-mono, --font-sans, etc.)"
+      - id: AC6
+        criteria: "svelte.config.js uses adapter-static with fallback: 'index.html' for SPA mode"
+      - id: AC7
+        criteria: "src/routes/+layout.svelte imports app.css and renders a <slot> within a .app container"
+      - id: AC8
+        criteria: "TypeScript is configured (tsconfig.json or jsconfig.json present)"
+    constraints:
+      - "Do NOT use npm or yarn — only Bun"
+      - "Do NOT add component libraries (no Tailwind, no Skeleton, no DaisyUI)"
+      - "Do NOT implement any components beyond the layout shell"
+      - "CSS must use the exact color values from demos/demo-a-ide/index.html"
+    failure_modes:
+      - scenario: "Bun SvelteKit adapter-static compatibility issue"
+        likelihood: low
+        mitigation: "Fall back to Bun running Vite directly if adapter fails"
+    tech_stack: ["sveltekit", "svelte5", "bun", "typescript"]
+
+  # ==========================================================================
+  # PHASE 2: Core Backend Logic (after task-001)
+  # ==========================================================================
+
+  - id: task-003
+    title: "Event parser with tool correlation and tree building"
+    description: |
+      Implement the event_parser module that reads events.jsonl files, parses
+      each line into an Event object, correlates tool.execution_complete with
+      tool.execution_start to resolve missing toolName, and builds a nested
+      tree structure from parentId chains. Also computes session statistics.
+    agent: gem-implementer
+    priority: critical
+    effort: medium
+    dependencies: [task-001]
+    context_files:
+      - "MEMORY.md"
+      - "backend/models.py"
+      - "backend/event_parser.py"
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          parse_events_file(path) reads a real events.jsonl from
+          ~/.copilot/session-state/ and returns a list of Event objects.
+          Each Event has: type (str), data (dict), id (str), timestamp (datetime),
+          parent_id (str|None).
+      - id: AC2
+        criteria: |
+          correlate_tool_names(events) populates tool_name field on
+          tool.execution_complete events by matching toolCallId from
+          tool.execution_start events. Verified by checking that at least
+          90% of tool.execution_complete events have a non-None tool_name
+          after correlation on a real session.
+      - id: AC3
+        criteria: |
+          build_event_tree(events) returns a list of TreeNode objects where
+          each TreeNode has: event (Event), children (list[TreeNode]).
+          Root nodes are events with parent_id=None.
+      - id: AC4
+        criteria: |
+          compute_stats(events) returns a SessionStats object with fields:
+          total_events (int), duration_seconds (float|None), models_used (list[str]),
+          input_tokens (int), output_tokens (int), cache_read_tokens (int),
+          cache_write_tokens (int), tool_calls (int), user_messages (int),
+          assistant_turns (int).
+      - id: AC5
+        criteria: |
+          Malformed JSON lines (truncated, empty, non-JSON) are skipped
+          without raising exceptions. A warning is logged.
+      - id: AC6
+        criteria: |
+          Running 'python -c "from backend.event_parser import parse_events_file; ..."'
+          against the largest session (8MB) completes in under 5 seconds.
+    constraints:
+      - "Do NOT load entire file into memory at once — read line by line"
+      - "Do NOT modify the events.jsonl files"
+      - "Do NOT import any ML/AI libraries"
+      - "Do NOT assume events are sorted by timestamp (sort after parsing)"
+    failure_modes:
+      - scenario: "toolCallId field name varies across Copilot CLI versions"
+        likelihood: medium
+        mitigation: "Search for toolCallId in both data and data.toolCall sub-objects"
+      - scenario: "parentId chain creates cycles"
+        likelihood: low
+        mitigation: "Track visited IDs during tree building, break on revisit"
+    tech_stack: ["python3.12", "pydantic"]
+
+  - id: task-004
+    title: "Session manager with active detection"
+    description: |
+      Implement the session_manager module that discovers all sessions in
+      ~/.copilot/session-state/, reads workspace.yaml metadata, detects
+      active sessions via lock files with PID validation, and provides
+      a sorted session list (active first, then by date).
+    agent: gem-implementer
+    priority: critical
+    effort: medium
+    dependencies: [task-001]
+    context_files:
+      - "MEMORY.md"
+      - "backend/models.py"
+      - "backend/session_manager.py"
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          discover_sessions() returns a list of Session objects for all
+          directories in ~/.copilot/session-state/. Each Session has:
+          id (str, UUID from directory name), cwd (str), summary (str|None),
+          created_at (datetime), updated_at (datetime), is_active (bool),
+          repository (str|None), branch (str|None).
+      - id: AC2
+        criteria: |
+          is_session_active(session_dir) returns True only when an
+          inuse.*.lock file exists AND the PID inside it corresponds
+          to a running process (verified via os.kill(pid, 0) or
+          /proc/{pid}/status).
+      - id: AC3
+        criteria: |
+          Sessions are sorted: active sessions first (sorted by updated_at desc),
+          then inactive sessions (sorted by updated_at desc).
+      - id: AC4
+        criteria: |
+          discover_sessions() handles gracefully: sessions without workspace.yaml,
+          sessions without events.jsonl, corrupted workspace.yaml. These sessions
+          are included with fallback metadata (id from dirname, cwd=None, summary=None).
+      - id: AC5
+        criteria: |
+          Running 'python -c "from backend.session_manager import discover_sessions; sessions = discover_sessions(); print(len(sessions))"'
+          returns approximately 136 (the known session count) and completes in under 3 seconds.
+      - id: AC6
+        criteria: |
+          get_session_metadata(session_dir) correctly parses workspace.yaml fields:
+          id, cwd, summary, created_at, updated_at, repository, branch.
+    constraints:
+      - "Do NOT use subprocess to check PID — use os.kill(pid, 0) with signal 0"
+      - "Do NOT cache session data permanently — re-read from disk each call (caching added later)"
+      - "Do NOT read events.jsonl — only workspace.yaml and lock files"
+      - "Do NOT follow symlinks outside ~/.copilot/session-state/"
+    failure_modes:
+      - scenario: "workspace.yaml has unexpected format or encoding"
+        likelihood: medium
+        mitigation: "Wrap YAML parsing in try/except, fall back to minimal Session with id only"
+      - scenario: "Lock file exists but PID is not a number"
+        likelihood: low
+        mitigation: "Parse PID with try/except, treat as inactive on failure"
+    tech_stack: ["python3.12", "pyyaml", "pydantic"]
+
+  # ==========================================================================
+  # PHASE 3: API Layer + File Watching (after task-003, task-004)
+  # ==========================================================================
+
+  - id: task-005
+    title: "REST API endpoints for sessions and statistics"
+    description: |
+      Implement the REST API layer with endpoints for listing sessions,
+      fetching session details with events, and computing statistics.
+      Wire up the session_manager and event_parser into FastAPI route handlers.
+    agent: gem-implementer
+    priority: critical
+    effort: medium
+    dependencies: [task-003, task-004]
+    context_files:
+      - "backend/api/sessions.py"
+      - "backend/session_manager.py"
+      - "backend/event_parser.py"
+      - "backend/models.py"
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          GET /api/sessions returns a JSON array. Each element has fields:
+          id (string), summary (string|null), cwd (string|null),
+          created_at (ISO 8601 string), updated_at (ISO 8601 string),
+          is_active (boolean), repository (string|null), branch (string|null).
+      - id: AC2
+        criteria: |
+          GET /api/sessions returns sessions sorted: active first (by updated_at desc),
+          then inactive (by updated_at desc). Response contains approximately 136 items.
+      - id: AC3
+        criteria: |
+          GET /api/sessions/{id} returns a JSON object with session metadata
+          and an 'events' array. Each event has: type, data, id, timestamp,
+          parent_id. Returns 404 with {"detail": "Session not found"} for
+          unknown session IDs.
+      - id: AC4
+        criteria: |
+          GET /api/sessions/{id}/stats returns a JSON object with fields:
+          total_events, duration_seconds, models_used, input_tokens,
+          output_tokens, cache_read_tokens, cache_write_tokens, tool_calls,
+          user_messages, assistant_turns.
+      - id: AC5
+        criteria: |
+          GET /api/sessions/{id}/tree returns a JSON array of TreeNode objects
+          representing the nested event hierarchy.
+      - id: AC6
+        criteria: |
+          All endpoints return proper HTTP status codes: 200 for success,
+          404 for not found, 500 for internal errors with error detail.
+      - id: AC7
+        criteria: |
+          GET /api/sessions responds within 3 seconds (full session list).
+          GET /api/sessions/{id} responds within 5 seconds for the largest session.
+    constraints:
+      - "Do NOT implement write/mutation endpoints — this is a read-only API"
+      - "Do NOT add authentication"
+      - "Do NOT return raw file paths in API responses for security"
+    failure_modes:
+      - scenario: "Large session with 3490 events causes timeout"
+        likelihood: medium
+        mitigation: "Add optional ?limit=N&offset=M query params to events endpoint"
+    tech_stack: ["python3.12", "fastapi"]
+
+  - id: task-006
+    title: "File watcher and WebSocket real-time streaming"
+    description: |
+      Implement inotify-based file watching for active sessions' events.jsonl
+      using watchdog, and a WebSocket endpoint that streams new events to
+      connected clients in real-time. Handle connection lifecycle, multiple
+      clients per session, and graceful disconnection.
+    agent: gem-implementer
+    priority: critical
+    effort: large
+    dependencies: [task-003, task-004]
+    context_files:
+      - "backend/file_watcher.py"
+      - "backend/api/websocket.py"
+      - "backend/event_parser.py"
+      - "backend/models.py"
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          FileWatcher class watches a single events.jsonl file via watchdog.
+          When lines are appended, it reads only the new lines (tracks file
+          position), parses them, and calls on_event(event) for each.
+      - id: AC2
+        criteria: |
+          WS /ws/sessions/{id}/events accepts WebSocket connections.
+          On connect, returns the current event count as an initial message:
+          {"type": "connected", "data": {"session_id": "...", "event_count": N}}.
+      - id: AC3
+        criteria: |
+          When events.jsonl is modified on disk (new lines appended),
+          new events are pushed to all connected WebSocket clients within
+          1 second. Each message is JSON: {"type": "event", "data": {<Event>}}.
+      - id: AC4
+        criteria: |
+          WebSocket handles client disconnection gracefully — no uncaught
+          exceptions, watcher resources are cleaned up when last client
+          disconnects from a session.
+      - id: AC5
+        criteria: |
+          Multiple WebSocket clients can connect to the same session
+          simultaneously and all receive the same events.
+      - id: AC6
+        criteria: |
+          Partial JSON lines (from burst writes) are buffered and only
+          emitted when a complete line (ending with \n) is available.
+      - id: AC7
+        criteria: |
+          A WebSocket connection to a non-existent session returns a close
+          frame with code 4004 and reason "Session not found".
+    constraints:
+      - "Do NOT use threading for WebSocket handling — use asyncio"
+      - "Do NOT poll faster than 200ms — use inotify events from watchdog"
+      - "Do NOT watch inactive sessions — only watch when a client connects"
+    failure_modes:
+      - scenario: "Burst writes produce partial JSON lines"
+        likelihood: high
+        mitigation: "Buffer trailing incomplete lines, only process lines ending with newline"
+      - scenario: "File watcher misses events during high burst"
+        likelihood: medium
+        mitigation: "On each inotify event, read ALL available new lines (not just one)"
+    tech_stack: ["python3.12", "fastapi", "watchdog", "asyncio"]
+
+  # ==========================================================================
+  # PHASE 4: Frontend Core Components (after task-002, parallel with Phase 3)
+  # ==========================================================================
+
+  - id: task-007
+    title: "Frontend layout shell with sidebar and main panels"
+    description: |
+      Build the main application layout matching the demo-a-ide design:
+      sidebar (250px) with session list area, main content with header
+      (breadcrumb + status), event stream panel (top), and detail panel
+      (bottom) with tab bar. Include all CSS from the demo reference.
+    agent: gem-implementer
+    priority: high
+    effort: medium
+    dependencies: [task-002]
+    context_files:
+      - "demos/demo-a-ide/index.html"
+      - "frontend/src/routes/+layout.svelte"
+      - "frontend/src/app.css"
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          src/routes/+page.svelte renders the full IDE layout: sidebar (250px),
+          main area with header (36px), event panel (top 60%), resize handle,
+          detail panel (bottom 40%) with tab bar.
+      - id: AC2
+        criteria: |
+          All CSS from demos/demo-a-ide/index.html is translated into the SvelteKit
+          app (in app.css or component styles). Visual appearance matches the demo
+          when viewed side-by-side.
+      - id: AC3
+        criteria: |
+          Tab bar has 3 tabs: Statistics, Tree View, Raw JSON. Clicking a tab
+          shows only that tab's content pane.
+      - id: AC4
+        criteria: |
+          Header shows breadcrumb (Sessions > {session_id} > Events),
+          LIVE indicator (green pulsing dot for active sessions), and search bar.
+      - id: AC5
+        criteria: |
+          Sidebar has: logo/title header ("Copilot Reader / Session Explorer"),
+          "Sessions" section label, scrollable session list area.
+      - id: AC6
+        criteria: |
+          Custom scrollbar styles match demo (8px width, #424242 thumb, transparent track).
+      - id: AC7
+        criteria: |
+          Resize handle between event panel and detail panel allows vertical resizing
+          (drag to change proportions).
+    constraints:
+      - "Do NOT use any CSS framework or component library"
+      - "Do NOT implement data fetching or WebSocket connections — only UI shell"
+      - "Do NOT hard-code session data — use placeholder/empty states"
+    failure_modes:
+      - scenario: "Layout breaks on different viewport sizes"
+        likelihood: medium
+        mitigation: "Use flexbox with min-width constraints, test at 1280px and 1920px"
+    tech_stack: ["svelte5", "css"]
+
+  - id: task-008
+    title: "Svelte stores and API client for data management"
+    description: |
+      Create Svelte 5 stores (using runes) and an API client module that fetches
+      session data from the backend REST API and manages WebSocket connections
+      for real-time event streaming. This is the data layer the UI components
+      will consume.
+    agent: gem-implementer
+    priority: high
+    effort: medium
+    dependencies: [task-002]
+    context_files:
+      - "frontend/src/lib/"
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          src/lib/api.ts exports functions: fetchSessions(), fetchSession(id),
+          fetchSessionStats(id), fetchSessionTree(id). Each calls the corresponding
+          REST endpoint and returns typed data.
+      - id: AC2
+        criteria: |
+          src/lib/stores/sessions.svelte.ts exports a sessions store with:
+          sessions (array), selectedSessionId (string|null), isLoading (boolean),
+          loadSessions() method, selectSession(id) method. Uses Svelte 5 $state rune.
+      - id: AC3
+        criteria: |
+          src/lib/stores/events.svelte.ts exports an events store with:
+          events (array), stats (object|null), tree (array), isLoading (boolean),
+          loadEvents(sessionId) method, appendEvent(event) method.
+      - id: AC4
+        criteria: |
+          src/lib/stores/websocket.svelte.ts exports a WebSocket store that:
+          connects to WS /ws/sessions/{id}/events, auto-reconnects on disconnect
+          (with exponential backoff, max 5 retries), calls events.appendEvent()
+          on each received event, exposes isConnected (boolean).
+      - id: AC5
+        criteria: |
+          API base URL is configurable via an environment variable or defaults to
+          window.location.origin (for production) or http://localhost:8000 (for dev).
+      - id: AC6
+        criteria: |
+          All TypeScript types are defined in src/lib/types.ts matching the backend
+          Pydantic models: Session, SessionSummary, Event, SessionStats, TreeNode.
+    constraints:
+      - "Do NOT use Svelte 4 stores ($: reactive) — use Svelte 5 runes ($state, $derived, $effect)"
+      - "Do NOT implement polling — use WebSocket for real-time, fetch for initial load"
+      - "Do NOT add error toast/notification UI — just expose error state"
+    failure_modes:
+      - scenario: "WebSocket reconnect loop on server restart"
+        likelihood: medium
+        mitigation: "Exponential backoff: 1s, 2s, 4s, 8s, 16s, then stop. Reset on successful connect."
+    tech_stack: ["svelte5", "typescript"]
+
+  # ==========================================================================
+  # PHASE 5: Connected Features (after Phase 3 + Phase 4)
+  # ==========================================================================
+
+  - id: task-009
+    title: "Session list sidebar with search and active indicators"
+    description: |
+      Build the SessionCard component and wire the sidebar to display real
+      session data from the API. Include search/filter, active session
+      indicators (green pulsing dot), and session selection.
+    agent: gem-implementer
+    priority: high
+    effort: medium
+    dependencies: [task-005, task-007, task-008]
+    context_files:
+      - "demos/demo-a-ide/index.html"
+      - "frontend/src/lib/components/"
+      - "frontend/src/lib/stores/"
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          SessionCard.svelte renders each session with: green pulsing dot (active)
+          or gray dot (inactive), summary text (truncated with ellipsis), cwd path
+          (monospace, truncated), relative time ("2 min ago", "3h ago", "2d ago").
+      - id: AC2
+        criteria: |
+          Clicking a SessionCard selects it (highlighted with blue-left-border
+          and bg-active background), loads its events in the main panel, and
+          updates the breadcrumb.
+      - id: AC3
+        criteria: |
+          A search input at the top of the sidebar filters sessions by summary
+          text and cwd path (case-insensitive substring match).
+      - id: AC4
+        criteria: |
+          Active sessions appear at the top of the list, separated from inactive
+          sessions. Active count is shown in the section label.
+      - id: AC5
+        criteria: |
+          The session list loads on page mount and shows a loading skeleton or
+          spinner while fetching.
+      - id: AC6
+        criteria: |
+          Session list polls for updates every 10 seconds to detect newly
+          started/stopped sessions.
+    constraints:
+      - "Do NOT implement drag-and-drop or reordering"
+      - "Do NOT fetch events for unselected sessions"
+    failure_modes:
+      - scenario: "136 sessions cause scrolling jank"
+        likelihood: low
+        mitigation: "Sessions are simple DOM elements (not complex), 136 is fine without virtualization"
+    tech_stack: ["svelte5", "typescript"]
+
+  - id: task-010
+    title: "Real-time event stream view with WebSocket"
+    description: |
+      Build the EventRow and EventStream components that display events in
+      the main panel. Connect to WebSocket for real-time streaming. Events
+      appear with fade-in animation, auto-scroll to bottom, and click-to-expand
+      for event details (syntax-highlighted JSON).
+    agent: gem-implementer
+    priority: high
+    effort: large
+    dependencies: [task-006, task-007, task-008]
+    context_files:
+      - "demos/demo-a-ide/index.html"
+      - "frontend/src/lib/components/"
+      - "frontend/src/lib/stores/"
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          EventRow.svelte renders each event with: timestamp (HH:MM:SS.mmm),
+          colored badge (session=blue, user=green, assistant=purple, tool=orange,
+          subagent=cyan, hook=gray, error=red), description text, and expand icon
+          for expandable events.
+      - id: AC2
+        criteria: |
+          EventStream.svelte renders a scrollable list of EventRow components.
+          Shows event count in the header. New events animate in with fadeSlideIn
+          (opacity 0→1, translateY 6px→0, 300ms).
+      - id: AC3
+        criteria: |
+          Auto-scroll is enabled by default: new events scroll the container to
+          bottom. If user scrolls up manually, auto-scroll disables. Scrolling
+          back to bottom re-enables auto-scroll.
+      - id: AC4
+        criteria: |
+          Clicking an expandable event row toggles a detail panel below it showing
+          syntax-highlighted JSON of the event's data field (keys=cyan, strings=orange,
+          numbers=green, booleans=blue, null=gray).
+      - id: AC5
+        criteria: |
+          On session selection, existing events load via REST API (GET /api/sessions/{id}),
+          then WebSocket connects for real-time updates. Historical events appear
+          instantly, new events stream in with animation.
+      - id: AC6
+        criteria: |
+          Event descriptions are human-readable: tool.execution_start shows
+          "toolName → brief_args", user.message shows truncated content,
+          assistant.message shows "tool call count" or truncated text.
+      - id: AC7
+        criteria: |
+          LIVE indicator in header pulses green when WebSocket is connected to
+          an active session. Shows "ENDED" (gray) for inactive sessions.
+    constraints:
+      - "Do NOT implement virtual scrolling for MVP — simple DOM rendering"
+      - "Do NOT modify event data — display only"
+    failure_modes:
+      - scenario: "3490 events in DOM cause scroll performance issues"
+        likelihood: medium
+        mitigation: "Lazy rendering: initially show last 200 events, load more on scroll-up"
+    tech_stack: ["svelte5", "typescript", "css"]
+
+  # ==========================================================================
+  # PHASE 6: Enhanced Features (after Phase 5)
+  # ==========================================================================
+
+  - id: task-011
+    status: ready
+    title: "Statistics panel with animated cards and charts"
+    description: |
+      Build the Statistics tab in the detail panel: stat cards grid showing
+      model, duration, token counts, tool calls, etc. Include animated bar
+      chart for token usage breakdown. Apply design feedback to make stats
+      MORE stylish with gradients and modern typography.
+    agent: gem-implementer
+    priority: high
+    effort: medium
+    dependencies: [task-005, task-010]
+    context_files:
+      - "demos/demo-a-ide/index.html"
+      - "frontend/src/lib/components/"
+    resume_focus:
+      - "Add cache_write_tokens to backend models, stats computation, API responses, frontend types, and tests."
+      - "Render Cache Write in the statistics grid/chart and keep the current card color expectations aligned with the task contract."
+      - "Keep independent stats fetching in scope unless a shared-store change is required to satisfy an existing acceptance criterion."
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          StatsPanel.svelte displays a grid of StatCard components. Each card
+          shows: label (uppercase, small), value (large monospace number or text).
+          Cards shown: Model, Duration, Tokens In, Tokens Out, Cache Read,
+          Tool Calls, User Messages, Assistant Turns.
+      - id: AC2
+        criteria: |
+          Stat cards have enhanced styling beyond the demo: subtle gradient
+          backgrounds (not flat), a thin colored accent line on the left edge,
+          and slightly rounded corners (8px). Values use the accent color for
+          model name and green for counts.
+      - id: AC3
+        criteria: |
+          Token usage bar chart shows: Input, Output, Cache Read, Cache Write
+          with colored bars (blue, purple, green, orange). Bars animate from
+          0% to final width on mount (1.5s cubic-bezier transition).
+      - id: AC4
+        criteria: |
+          Numeric values have count-up animation from 0 to final value
+          (1.2s duration, ease-out cubic).
+      - id: AC5
+        criteria: |
+          Stats load from GET /api/sessions/{id}/stats when a session is
+          selected. Loading state shows skeleton placeholders.
+      - id: AC6
+        criteria: |
+          Stat cards are responsive within the panel: grid uses
+          repeat(auto-fill, minmax(160px, 1fr)).
+    constraints:
+      - "Do NOT use charting libraries (D3, Chart.js, etc.) — CSS-only bars"
+      - "Do NOT calculate stats on the frontend — fetch from API"
+    non_goals:
+      - "Do NOT refactor statistics loading into a shared live store unless it is required to satisfy a frozen acceptance criterion."
+      - "Do NOT add new statistics categories beyond the defined cards and token bars."
+    failure_modes:
+      - scenario: "Stats API returns nulls for sessions without shutdown event"
+        likelihood: high
+        mitigation: "Handle null/undefined gracefully: show '—' for missing values"
+    tech_stack: ["svelte5", "css"]
+
+  - id: task-012
+    status: ready
+    title: "Nested tree view of event hierarchy"
+    description: |
+      Build the Tree View tab showing events in a nested hierarchy:
+      session → turns → user.message / assistant.message → tool calls → sub-agents.
+      Collapsible nodes, event icons, duration display for completed operations.
+    agent: gem-implementer
+    priority: medium
+    effort: medium
+    dependencies: [task-005, task-010]
+    context_files:
+      - "demos/demo-a-ide/index.html"
+      - "frontend/src/lib/components/"
+    resume_focus:
+      - "Enrich the tree API response with duration, status, and brief-description metadata before expanding the renderer."
+      - "Normalize tool and sub-agent labeling around event.tool_name with data-field fallback only where needed."
+      - "Add backend depth limiting and cycle guards, then cover them with tests before relying on the recursive UI."
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          EventTree.svelte renders a recursive tree structure from the
+          GET /api/sessions/{id}/tree endpoint. Each node shows: toggle arrow
+          (▼/▶), icon (📁 session, 🔷 turn, 💬 user, 🤖 assistant, 🔧 tool,
+          ✅ completed, ❌ failed), event type text, and metadata (event count,
+          duration, brief description).
+      - id: AC2
+        criteria: |
+          Clicking the toggle arrow collapses/expands children. Root nodes
+          start expanded, deeper nodes (depth > 2) start collapsed.
+      - id: AC3
+        criteria: |
+          Tree rows have hover highlight (bg-hover) and are styled with
+          monospace font, matching the demo tree view CSS.
+      - id: AC4
+        criteria: |
+          Tool call nodes show tool name (colored orange) and duration.
+          Sub-agent nodes show agent name (colored cyan) and status.
+      - id: AC5
+        criteria: |
+          Children are indented 16px per level via padding-left.
+    constraints:
+      - "Do NOT implement drag-and-drop tree manipulation"
+      - "Do NOT flatten the tree — maintain parent-child hierarchy from API"
+    non_goals:
+      - "Do NOT replace the recursive tree renderer with virtualization in this task."
+      - "Do NOT redesign the event stream or raw JSON tabs as part of the tree-view work."
+    failure_modes:
+      - scenario: "Deep parentId chains (427 levels) cause stack overflow in recursive rendering"
+        likelihood: medium
+        mitigation: "Backend tree builder should cap depth at 50 levels, flattening deeper nodes"
+    tech_stack: ["svelte5", "typescript"]
+
+  # ==========================================================================
+  # PHASE 7: Design Polish (after Phase 6)
+  # ==========================================================================
+
+  - id: task-013
+    status: blocked
+    title: "Design polish: enhanced sidebar and statistics styling"
+    description: |
+      Apply the user's design feedback: make the sidebar session cards MORE
+      visually appealing (better cards, hover effects, active indicators),
+      and make statistics blocks MORE stylish/modern (gradients, better
+      typography, subtle animations). Create a design spec first, then implement.
+    agent: gem-designer
+    priority: medium
+    effort: medium
+    dependencies: [task-009, task-011]
+    blocked_by: [task-011]
+    context_files:
+      - "demos/demo-a-ide/index.html"
+      - "frontend/src/lib/components/SessionCard.svelte"
+      - "frontend/src/lib/components/StatCard.svelte"
+      - "frontend/src/lib/components/StatsPanel.svelte"
+      - "frontend/src/app.css"
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          Design audit produced with specific CSS changes for sidebar session
+          cards: improved hover states, active indicator styling, card borders/shadows,
+          typography refinements.
+      - id: AC2
+        criteria: |
+          Design audit produced with specific CSS changes for stat cards:
+          gradient backgrounds, accent borders, improved number typography,
+          animation refinements.
+      - id: AC3
+        criteria: |
+          Design changes documented as actionable CSS/component modifications
+          that gem-implementer can apply.
+    constraints:
+      - "Do NOT change the overall layout structure (sidebar width, panel proportions)"
+      - "Do NOT introduce new colors outside the existing palette"
+      - "Do NOT add external fonts or icon libraries"
+    review_depth: "design-audit"
+    validation_scenarios: []
+
+  - id: task-014
+    status: blocked
+    title: "Implement design polish from design spec"
+    description: |
+      Apply the design changes from task-013's design audit to the sidebar
+      session cards and statistics panel components.
+    agent: gem-implementer
+    priority: medium
+    effort: small
+    dependencies: [task-013]
+    blocked_by: [task-013]
+    context_files:
+      - "frontend/src/lib/components/SessionCard.svelte"
+      - "frontend/src/lib/components/StatCard.svelte"
+      - "frontend/src/lib/components/StatsPanel.svelte"
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          Sidebar session cards have: subtle background gradient on hover,
+          smooth transition (200ms), active card has a glowing left border
+          accent, and improved spacing between elements.
+      - id: AC2
+        criteria: |
+          Stat cards have: subtle dark gradient backgrounds, thin colored
+          accent line on the left, smooth count-up animation, and improved
+          label/value typography contrast.
+      - id: AC3
+        criteria: |
+          All animations use CSS transitions (not JavaScript-driven),
+          respect prefers-reduced-motion media query.
+    constraints:
+      - "Do NOT change component logic or data flow — CSS/styling only"
+    tech_stack: ["svelte5", "css"]
+
+  # ==========================================================================
+  # PHASE 8: Integration & DevOps (after Phase 6)
+  # ==========================================================================
+
+  - id: task-015
+    status: ready_deferred
+    title: "Launch script and static file serving"
+    description: |
+      Create start.sh that builds the frontend, then starts the FastAPI server
+      serving both the API and the built SvelteKit static files. Also create
+      a dev mode that runs both servers concurrently with hot-reload.
+    agent: gem-devops
+    priority: high
+    effort: small
+    dependencies: [task-005, task-006, task-010]
+    context_files:
+      - "backend/main.py"
+      - "frontend/package.json"
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          start.sh exists at project root, is executable (chmod +x), and when
+          run: (1) installs Python deps if needed, (2) installs frontend deps
+          if needed, (3) builds frontend, (4) starts uvicorn serving the app
+          on port 8000 (or COPILOT_READER_PORT env var).
+      - id: AC2
+        criteria: |
+          Running './start.sh' opens a working app at http://localhost:8000
+          with both the UI and API functional.
+      - id: AC3
+        criteria: |
+          './start.sh --dev' or './start.sh dev' starts both: Vite dev server
+          (port 5173) with hot-reload AND uvicorn (port 8000) with --reload.
+          Both are started as background processes, killed on script exit (trap).
+      - id: AC4
+        criteria: |
+          FastAPI main.py mounts SvelteKit build output at / using StaticFiles
+          with fallback to index.html (SPA routing). API routes at /api/* and
+          WebSocket at /ws/* take priority over static files.
+      - id: AC5
+        criteria: |
+          start.sh checks for Python 3.12+, Bun, and required tools. Prints
+          clear error messages if dependencies are missing.
+    constraints:
+      - "Do NOT use Docker — direct process execution"
+      - "Do NOT require global npm/yarn — only Bun"
+    environment: "linux-ubuntu-24.04"
+
+  # ==========================================================================
+  # PHASE 9: Review & Documentation (after all features)
+  # ==========================================================================
+
+  - id: task-016
+    status: blocked
+    title: "Security review of API and file access"
+    description: |
+      Review the entire codebase for security issues: path traversal in
+      session ID parameter, WebSocket connection limits, file access
+      boundaries, information disclosure in error messages.
+    agent: gem-reviewer
+    priority: high
+    effort: small
+    dependencies: [task-005, task-006, task-015]
+    blocked_by: [task-015]
+    context_files:
+      - "backend/"
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          Session ID parameter validated as UUID format — no path traversal
+          possible (e.g., ../../etc/passwd rejected).
+      - id: AC2
+        criteria: |
+          File access restricted to ~/.copilot/session-state/{valid-uuid}/ only.
+          No symlink following outside this boundary.
+      - id: AC3
+        criteria: |
+          Error responses do not leak internal file paths, stack traces, or
+          system information in production mode.
+      - id: AC4
+        criteria: |
+          WebSocket connections have a per-session limit (max 10 concurrent
+          connections) to prevent resource exhaustion.
+      - id: AC5
+        criteria: |
+          Review findings documented with severity levels and fix recommendations.
+    constraints:
+      - "Do NOT modify code — review only, produce findings report"
+    review_depth: "security-focused"
+
+  - id: task-017
+    status: blocked
+    title: "Project documentation with setup guide"
+    description: |
+      Write comprehensive README.md with project overview, features,
+      screenshots placeholder, setup instructions, development guide,
+      architecture overview, and API reference.
+    agent: gem-documentation-writer
+    priority: medium
+    effort: small
+    dependencies: [task-015]
+    blocked_by: [task-015]
+    context_files:
+      - "MEMORY.md"
+      - "backend/"
+      - "frontend/"
+      - "start.sh"
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          README.md exists at project root with sections: Overview, Features,
+          Quick Start (3-step setup), Development (how to run in dev mode),
+          Architecture (backend/frontend diagram), API Reference (endpoints table),
+          Project Structure (directory tree).
+      - id: AC2
+        criteria: |
+          Quick Start section has exact commands: git clone, ./start.sh,
+          open browser to http://localhost:8000.
+      - id: AC3
+        criteria: |
+          API Reference lists all endpoints with method, path, description,
+          and example response snippets.
+      - id: AC4
+        criteria: |
+          Architecture section includes a text-based diagram showing:
+          Browser ↔ FastAPI ↔ FileWatcher ↔ ~/.copilot/session-state/.
+    constraints:
+      - "Do NOT include screenshots yet — use [Screenshot placeholder] markers"
+      - "Do NOT document internal implementation details — focus on user-facing docs"
+    audience: "developers who want to use or contribute to the tool"
+
+  # ==========================================================================
+  # PHASE 10: Validation (final)
+  # ==========================================================================
+
+  - id: task-018
+    status: blocked
+    title: "End-to-end browser testing and validation"
+    description: |
+      Validate the complete application works end-to-end: start the app,
+      verify session list loads, select a session, verify events display,
+      check real-time streaming with an active session, verify statistics
+      and tree view tabs work.
+    agent: gem-browser-tester
+    priority: high
+    effort: medium
+    dependencies: [task-015, task-014]
+    blocked_by: [task-014, task-015]
+    context_files:
+      - "start.sh"
+    acceptance_criteria:
+      - id: AC1
+        criteria: |
+          App starts via ./start.sh and is accessible at http://localhost:8000.
+          Page loads without console errors.
+      - id: AC2
+        criteria: |
+          Session list sidebar displays sessions with correct summary text,
+          active indicators (green dots), and relative timestamps.
+      - id: AC3
+        criteria: |
+          Clicking a session loads its events in the event stream panel.
+          Events show timestamps, colored badges, and descriptions.
+      - id: AC4
+        criteria: |
+          Clicking an expandable event shows syntax-highlighted JSON detail.
+      - id: AC5
+        criteria: |
+          Statistics tab shows stat cards with values and bar chart.
+          Tree View tab shows nested event hierarchy.
+      - id: AC6
+        criteria: |
+          No JavaScript errors in browser console during normal usage.
+    validation_scenarios:
+      - "Load page, verify session list appears"
+      - "Click a session, verify events load"
+      - "Switch tabs (Statistics, Tree View, Raw JSON)"
+      - "Search sessions by text"
+      - "Expand event details"
+
+# ============================================================================
+# Dependency Graph (visual)
+# ============================================================================
+# task-001 (Backend scaffold) ─┬─→ task-003 (Event parser) ──┬─→ task-005 (REST API) ──┬─→ task-009 (Session sidebar) ──→ task-013 (Design audit) ──→ task-014 (Design impl)
+#                               │                             │                         │                                                             │
+#                               └─→ task-004 (Session mgr) ──┤                         ├─→ task-010 (Event stream) ──┬─→ task-011 (Statistics) ──────→│
+#                                                             │                         │                            │                               │
+#                                                             └─→ task-006 (WebSocket) ─┘                            └─→ task-012 (Tree view) ───────→│
+#                                                                                                                                                    │
+# task-002 (Frontend scaffold) ─┬─→ task-007 (Layout shell) ─┼─→ (feeds into task-009, task-010)                                                     │
+#                                │                                                                                                                    │
+#                                └─→ task-008 (Stores/API) ───┘                                                                                       │
+#                                                                                                                                                     │
+# task-015 (Launch script) ←── task-005, task-006, task-010                                                                                           │
+# task-016 (Security review) ←── task-005, task-006, task-015                                                                                         │
+# task-017 (Documentation) ←── task-015                                                                                        task-018 (E2E test) ←──┘── task-015

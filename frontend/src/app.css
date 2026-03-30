@@ -1,0 +1,77 @@
+:root {
+  /* Backgrounds */
+  --bg-main: #1e1e1e;
+  --bg-sidebar: #252526;
+  --bg-panel: #2d2d2d;
+  --bg-hover: #2a2d2e;
+  --bg-active: #37373d;
+  --bg-input: #3c3c3c;
+
+  /* Text */
+  --text-primary: #d4d4d4;
+  --text-secondary: #858585;
+  --text-accent: #569cd6;
+  --text-bright: #ffffff;
+
+  /* Borders */
+  --border: #3c3c3c;
+  --border-light: #4c4c4c;
+  --border-active: #007acc;
+
+  /* Event type colors */
+  --color-session: #569cd6;    /* blue */
+  --color-user: #6a9955;       /* green */
+  --color-assistant: #c586c0;  /* purple */
+  --color-tool: #ce9178;       /* orange/amber */
+  --color-subagent: #4ec9b0;   /* cyan */
+  --color-hook: #858585;       /* gray */
+  --color-error: #f44747;      /* red */
+  --color-success: #89d185;    /* green */
+  --color-warning: #cca700;    /* yellow */
+
+  /* Color aliases (matching demo) */
+  --green: #4ec9b0;
+  --green-bright: #73c991;
+  --blue: #569cd6;
+  --purple: #c586c0;
+  --orange: #ce9178;
+  --cyan: #9cdcfe;
+  --red: #f44747;
+  --yellow: #dcdcaa;
+  --gray-dim: #6a6a6a;
+
+  /* Fonts */
+  --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Sizes */
+  --sidebar-width: 280px;
+  --header-height: 36px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  font-family: var(--font-sans);
+  background: var(--bg-main);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Styled scrollbars */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #424242; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #4f4f4f; }
+
+/* App container */
+.app { display: flex; height: 100vh; overflow: hidden; }
