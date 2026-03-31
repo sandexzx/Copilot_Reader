@@ -8,6 +8,7 @@
   let autoScroll = $state(true);
   let hasNewEvents = $state(false);
   let prevEventCount = $state(0);
+  let prevFirstEventId = $state<string | null>(null);
 
   function handleScroll() {
     if (!scrollContainer) return;
@@ -26,9 +27,18 @@
 
   $effect(() => {
     const count = events.length;
-    if (count > prevEventCount && prevEventCount > 0) {
+    const firstId = events.length > 0 ? events[0].id : null;
+    const isNewSession = firstId !== prevFirstEventId && firstId !== null;
+
+    if (isNewSession) {
+      // New session loaded — scroll to bottom
+      autoScroll = true;
+      hasNewEvents = false;
+      requestAnimationFrame(() => {
+        scrollContainer?.scrollTo({ top: scrollContainer.scrollHeight });
+      });
+    } else if (count > prevEventCount && prevEventCount > 0) {
       if (autoScroll && scrollContainer) {
-        // Use tick-like delay so DOM updates first
         requestAnimationFrame(() => {
           scrollContainer?.scrollTo({ top: scrollContainer.scrollHeight });
         });
@@ -37,6 +47,7 @@
       }
     }
     prevEventCount = count;
+    prevFirstEventId = firstId;
   });
 </script>
 

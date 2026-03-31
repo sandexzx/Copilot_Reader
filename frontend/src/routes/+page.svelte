@@ -19,7 +19,7 @@
   $effect(() => {
     sessionsStore.loadSessions();
     pollInterval = setInterval(() => {
-      sessionsStore.loadSessions();
+      sessionsStore.loadSessions(true);
     }, 10_000);
     return () => {
       clearInterval(pollInterval);

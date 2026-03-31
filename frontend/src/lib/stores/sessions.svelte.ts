@@ -9,15 +9,23 @@ class SessionsStore {
 	isLoading = $state(false);
 	error = $state<string | null>(null);
 
-	async loadSessions(): Promise<void> {
-		this.isLoading = true;
+	async loadSessions(background = false): Promise<void> {
+		if (!background) {
+			this.isLoading = true;
+		}
 		this.error = null;
 		try {
-			this.sessions = await fetchSessions();
+			const fresh = await fetchSessions();
+			// Only replace if data actually changed to avoid unnecessary re-renders
+			if (JSON.stringify(fresh) !== JSON.stringify(this.sessions)) {
+				this.sessions = fresh;
+			}
 		} catch (e) {
 			this.error = e instanceof Error ? e.message : 'Failed to load sessions';
 		} finally {
-			this.isLoading = false;
+			if (!background) {
+				this.isLoading = false;
+			}
 		}
 	}
 
