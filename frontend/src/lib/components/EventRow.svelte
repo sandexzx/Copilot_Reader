@@ -12,6 +12,21 @@
 	let bgColor = $derived(getEventBgColor(event.type));
 	let category = $derived(getEventCategory(event.type));
 	let detailHtml = $derived(colorizeJson(event.data));
+	let model = $derived((event.data?.model ?? event.data?.currentModel ?? '') as string);
+
+	let fileChip = $derived.by(() => {
+		const d = event.data;
+		const toolName = (d?.toolName ?? d?.tool_name ?? event.tool_name ?? '') as string;
+		if (['edit', 'view', 'create'].includes(toolName)) {
+			const args = d?.arguments as Record<string, unknown> | undefined;
+			const path = (args?.path ?? d?.path ?? '') as string;
+			if (path) {
+				const parts = path.split('/');
+				return parts[parts.length - 1];
+			}
+		}
+		return '';
+	});
 
 	function toggle() {
 		expanded = !expanded;
@@ -31,6 +46,12 @@
 		<span class="event-badge" style="color: {color}; background: {bgColor};">
 			{event.type}
 		</span>
+		{#if model}
+			<span class="model-chip">{model}</span>
+		{/if}
+		{#if fileChip}
+			<span class="file-chip">📄 {fileChip}</span>
+		{/if}
 		<span class="event-desc">{description}</span>
 		<span class="event-expand">{expanded ? '▾' : '▸'}</span>
 	</div>
@@ -93,6 +114,33 @@
 		text-align: center;
 		flex-shrink: 0;
 		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.model-chip {
+		padding: 1px 6px;
+		border-radius: 3px;
+		font-size: 9px;
+		font-weight: 500;
+		color: var(--cyan);
+		background: rgba(156, 220, 254, 0.12);
+		flex-shrink: 0;
+		white-space: nowrap;
+		font-family: var(--font-mono);
+	}
+
+	.file-chip {
+		padding: 1px 6px;
+		border-radius: 3px;
+		font-size: 9px;
+		font-weight: 500;
+		color: var(--orange);
+		background: rgba(206, 145, 120, 0.12);
+		flex-shrink: 0;
+		white-space: nowrap;
+		font-family: var(--font-mono);
+		max-width: 180px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
