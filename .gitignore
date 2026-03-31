@@ -23,7 +23,7 @@ htmlcov/
 !.env.*.example
 
 # Frontend / SvelteKit / Vite
-/frontend/node_modules/
+node_modules/
 /frontend/.svelte-kit/
 /frontend/build/
 /frontend/dist/

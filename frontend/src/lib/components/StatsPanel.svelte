@@ -113,14 +113,14 @@
 {:else if stats}
   {#key animKey}
     <div class="stat-grid">
-      <StatCard label="Model" value={modelDisplay} color="accent" accentColor="var(--blue)" animate={false} />
-      <StatCard label="Duration" value={formatDuration(stats.duration_seconds)} color="green" accentColor="var(--cyan)" animate={false} />
-      <StatCard label="Tokens In" value={stats.input_tokens} color="green" accentColor="var(--blue)" />
-      <StatCard label="Tokens Out" value={stats.output_tokens} color="green" accentColor="var(--purple)" />
-      <StatCard label="Cache Read" value={stats.cache_read_tokens} color="green" accentColor="var(--green)" />
-      <StatCard label="Tool Calls" value={stats.tool_calls} color="green" accentColor="var(--orange)" />
-      <StatCard label="User Messages" value={stats.user_messages} color="green" accentColor="var(--green)" />
-      <StatCard label="Assistant Turns" value={stats.assistant_turns} color="green" accentColor="var(--purple)" />
+      <StatCard label="Model" value={modelDisplay} color="accent" accentColor="var(--blue)" animate={false} index={0} />
+      <StatCard label="Duration" value={formatDuration(stats.duration_seconds)} color="green" accentColor="var(--cyan)" animate={false} index={1} />
+      <StatCard label="Tokens In" value={stats.input_tokens} color="green" accentColor="var(--blue)" index={2} />
+      <StatCard label="Tokens Out" value={stats.output_tokens} color="green" accentColor="var(--purple)" index={3} />
+      <StatCard label="Cache Read" value={stats.cache_read_tokens} color="green" accentColor="var(--green)" index={4} />
+      <StatCard label="Tool Calls" value={stats.tool_calls} color="green" accentColor="var(--orange)" index={5} />
+      <StatCard label="User Messages" value={stats.user_messages} color="green" accentColor="var(--green)" index={6} />
+      <StatCard label="Assistant Turns" value={stats.assistant_turns} color="green" accentColor="var(--purple)" index={7} />
     </div>
 
     <div class="chart-section">
@@ -159,7 +159,7 @@
   .stat-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 10px;
+    gap: 8px;
     margin-bottom: 20px;
   }
 
@@ -168,12 +168,14 @@
   }
 
   .chart-title {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.6px;
-    margin-bottom: 10px;
+    letter-spacing: 0.8px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   }
 
   .bar-chart {
@@ -200,8 +202,9 @@
   .bar-track {
     flex: 1;
     height: 16px;
-    background: var(--bg-main);
-    border-radius: 3px;
+    background: rgba(30, 30, 30, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 4px;
     overflow: hidden;
     position: relative;
   }
@@ -209,6 +212,7 @@
   .bar-fill {
     height: 100%;
     border-radius: 3px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
     transition: width 1.5s cubic-bezier(0.22, 0.61, 0.36, 1);
   }
 
@@ -278,5 +282,11 @@
   @keyframes shimmer {
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bar-fill {
+      transition-duration: 0.01ms;
+    }
   }
 </style>

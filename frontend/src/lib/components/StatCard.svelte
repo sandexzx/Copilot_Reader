@@ -5,6 +5,7 @@
     color?: 'accent' | 'green' | 'default';
     accentColor?: string;
     animate?: boolean;
+    index?: number;
   }
 
   let {
@@ -13,6 +14,7 @@
     color,
     accentColor,
     animate,
+    index = 0,
   }: Props = $props();
 
   let displayValue = $state<string | number>(0);
@@ -77,7 +79,7 @@
 <div
   class="stat-card"
   class:mounted
-  style="--accent-line: {accentColor ?? 'var(--border-active)'}; --value-accent: {accentColor ?? 'var(--text-accent)'}"
+  style="--accent-line: {accentColor ?? 'var(--border-active)'}; --value-accent: {accentColor ?? 'var(--text-accent)'}; --gradient-tint: {`color-mix(in srgb, ${accentColor ?? 'var(--border-active)'} 8%, transparent)`}; --stagger: {index}"
 >
   <div class="stat-label">{label}</div>
   <div class={valueClass}>{formattedValue}</div>
@@ -89,22 +91,31 @@
     overflow: hidden;
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 100%),
-      linear-gradient(135deg, rgba(86, 156, 214, 0.08) 0%, rgba(45, 45, 45, 0.96) 48%, rgba(30, 30, 30, 1) 100%);
+      linear-gradient(135deg, var(--gradient-tint, rgba(86, 156, 214, 0.08)) 0%, rgba(45, 45, 45, 0.96) 48%, rgba(30, 30, 30, 1) 100%);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 12px 14px 12px 16px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    padding: 14px 14px 14px 16px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     opacity: 0;
     transform: translateY(6px);
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    transition: opacity 0.35s ease-out, transform 0.35s ease-out, border-color 0.15s ease, box-shadow 0.15s ease;
+    transition-delay: calc(var(--stagger, 0) * 60ms);
   }
 
   .stat-card::before {
     content: '';
     position: absolute;
-    inset: 0 auto 0 0;
-    width: 2px;
+    top: 6px;
+    bottom: 6px;
+    left: 0;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
     background: var(--accent-line, var(--border-active));
+  }
+
+  .stat-card:hover {
+    border-color: var(--border-light);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.15);
   }
 
   .stat-card.mounted {
@@ -115,16 +126,18 @@
   .stat-label {
     font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.8px;
     color: var(--text-secondary);
-    margin-bottom: 4px;
+    margin-bottom: 6px;
   }
 
   .stat-value {
-    font-size: 20px;
-    font-weight: 600;
-    line-height: 1.2;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.1;
     font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
     color: var(--text-primary);
   }
 
@@ -134,5 +147,12 @@
 
   .stat-value.green {
     color: var(--green-bright);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stat-card {
+      transition-duration: 0.01ms;
+      transition-delay: 0ms;
+    }
   }
 </style>

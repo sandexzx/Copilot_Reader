@@ -15,6 +15,10 @@ from backend.models import SessionSummary
 
 client = TestClient(app)
 
+# Valid UUID used as directory names for test sessions
+S1_UUID = "a0000000-0000-0000-0000-000000000001"
+NONEXIST_UUID = "b0000000-0000-0000-0000-000000000099"
+
 SAMPLE_WORKSPACE_YAML = """\
 id: test-session-1
 cwd: /home/user/project
@@ -91,7 +95,7 @@ def _find_tree_node(node: dict, event_id: str) -> dict | None:
 
 class TestListSessions:
     def test_returns_json_array(self, tmp_path: Path) -> None:
-        _make_session(tmp_path, "s1", SAMPLE_WORKSPACE_YAML, SAMPLE_EVENTS)
+        _make_session(tmp_path, S1_UUID, SAMPLE_WORKSPACE_YAML, SAMPLE_EVENTS)
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
             resp = client.get("/api/sessions")
         assert resp.status_code == 200
@@ -100,7 +104,7 @@ class TestListSessions:
         assert len(data) == 1
 
     def test_session_summary_fields(self, tmp_path: Path) -> None:
-        _make_session(tmp_path, "s1", SAMPLE_WORKSPACE_YAML, SAMPLE_EVENTS)
+        _make_session(tmp_path, S1_UUID, SAMPLE_WORKSPACE_YAML, SAMPLE_EVENTS)
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
             resp = client.get("/api/sessions")
         item = resp.json()[0]
@@ -126,9 +130,9 @@ class TestListSessions:
 
 class TestGetSession:
     def test_returns_session_detail(self, tmp_path: Path) -> None:
-        _make_session(tmp_path, "s1", SAMPLE_WORKSPACE_YAML, SAMPLE_EVENTS)
+        _make_session(tmp_path, S1_UUID, SAMPLE_WORKSPACE_YAML, SAMPLE_EVENTS)
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
-            resp = client.get("/api/sessions/s1")
+            resp = client.get(f"/api/sessions/{S1_UUID}")
         assert resp.status_code == 200
         data = resp.json()
         assert data["id"] == "test-session-1"
@@ -137,9 +141,15 @@ class TestGetSession:
 
     def test_404_for_unknown_id(self, tmp_path: Path) -> None:
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
-            resp = client.get("/api/sessions/nonexistent-id")
+            resp = client.get(f"/api/sessions/{NONEXIST_UUID}")
         assert resp.status_code == 404
         assert resp.json() == {"detail": "Session not found"}
+
+    def test_400_for_invalid_uuid(self, tmp_path: Path) -> None:
+        with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
+            resp = client.get("/api/sessions/not-a-uuid")
+        assert resp.status_code == 400
+        assert resp.json() == {"detail": "Invalid session ID format"}
 
 
 # ---------------------------------------------------------------------------
@@ -149,18 +159,18 @@ class TestGetSession:
 
 class TestGetEvents:
     def test_returns_events_array(self, tmp_path: Path) -> None:
-        _make_session(tmp_path, "s1", SAMPLE_WORKSPACE_YAML, SAMPLE_EVENTS)
+        _make_session(tmp_path, S1_UUID, SAMPLE_WORKSPACE_YAML, SAMPLE_EVENTS)
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
-            resp = client.get("/api/sessions/s1/events")
+            resp = client.get(f"/api/sessions/{S1_UUID}/events")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
         assert len(data) == 4
 
     def test_events_have_tool_name_correlated(self, tmp_path: Path) -> None:
-        _make_session(tmp_path, "s1", SAMPLE_WORKSPACE_YAML, SAMPLE_EVENTS)
+        _make_session(tmp_path, S1_UUID, SAMPLE_WORKSPACE_YAML, SAMPLE_EVENTS)
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
-            resp = client.get("/api/sessions/s1/events")
+            resp = client.get(f"/api/sessions/{S1_UUID}/events")
         data = resp.json()
         complete = [e for e in data if e["type"] == "tool.execution_complete"]
         assert len(complete) == 1
@@ -168,7 +178,7 @@ class TestGetEvents:
 
     def test_404_for_unknown_session(self, tmp_path: Path) -> None:
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
-            resp = client.get("/api/sessions/nonexistent/events")
+            resp = client.get(f"/api/sessions/{NONEXIST_UUID}/events")
         assert resp.status_code == 404
         assert resp.json() == {"detail": "Session not found"}
 
@@ -180,9 +190,9 @@ class TestGetEvents:
 
 class TestGetStats:
     def test_returns_session_stats(self, tmp_path: Path) -> None:
-        _make_session(tmp_path, "s1", SAMPLE_WORKSPACE_YAML, SAMPLE_EVENTS)
+        _make_session(tmp_path, S1_UUID, SAMPLE_WORKSPACE_YAML, SAMPLE_EVENTS)
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
-            resp = client.get("/api/sessions/s1/stats")
+            resp = client.get(f"/api/sessions/{S1_UUID}/stats")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_events"] == 4
@@ -213,17 +223,17 @@ class TestGetStats:
                 "parentId": "ddd",
             },
         ]
-        _make_session(tmp_path, "s1", SAMPLE_WORKSPACE_YAML, events)
+        _make_session(tmp_path, S1_UUID, SAMPLE_WORKSPACE_YAML, events)
 
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
-            resp = client.get("/api/sessions/s1/stats")
+            resp = client.get(f"/api/sessions/{S1_UUID}/stats")
 
         assert resp.status_code == 200
         assert resp.json()["cache_write_tokens"] == 15
 
     def test_404_for_unknown_session(self, tmp_path: Path) -> None:
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
-            resp = client.get("/api/sessions/nonexistent/stats")
+            resp = client.get(f"/api/sessions/{NONEXIST_UUID}/stats")
         assert resp.status_code == 404
 
 
@@ -234,9 +244,9 @@ class TestGetStats:
 
 class TestGetTree:
     def test_returns_tree_nodes(self, tmp_path: Path) -> None:
-        _make_session(tmp_path, "s1", SAMPLE_WORKSPACE_YAML, SAMPLE_EVENTS)
+        _make_session(tmp_path, S1_UUID, SAMPLE_WORKSPACE_YAML, SAMPLE_EVENTS)
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
-            resp = client.get("/api/sessions/s1/tree")
+            resp = client.get(f"/api/sessions/{S1_UUID}/tree")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
@@ -247,7 +257,7 @@ class TestGetTree:
 
     def test_404_for_unknown_session(self, tmp_path: Path) -> None:
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
-            resp = client.get("/api/sessions/nonexistent/tree")
+            resp = client.get(f"/api/sessions/{NONEXIST_UUID}/tree")
         assert resp.status_code == 404
 
     def test_returns_enriched_tree_metadata(self, tmp_path: Path) -> None:
@@ -295,10 +305,10 @@ class TestGetTree:
                 "parentId": "eee",
             },
         ]
-        _make_session(tmp_path, "s1", SAMPLE_WORKSPACE_YAML, events)
+        _make_session(tmp_path, S1_UUID, SAMPLE_WORKSPACE_YAML, events)
 
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
-            resp = client.get("/api/sessions/s1/tree")
+            resp = client.get(f"/api/sessions/{S1_UUID}/tree")
 
         assert resp.status_code == 200
         root = resp.json()[0]

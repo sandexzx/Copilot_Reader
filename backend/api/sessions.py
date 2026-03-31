@@ -14,7 +14,8 @@ from ..event_parser import (
     parse_events_file,
 )
 from ..models import Event, Session, SessionStats, SessionSummary, TreeNode
-from ..session_manager import _get_session_state_dir, discover_sessions, get_session
+from ..security import safe_session_dir, validate_session_id
+from ..session_manager import discover_sessions, get_session
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 def _resolve_events_path(session_id: str):
     """Resolve the events.jsonl path for a session, raising 404 if missing."""
-    session_dir = _get_session_state_dir() / session_id
+    session_dir = safe_session_dir(session_id)
     if not session_dir.is_dir():
         raise HTTPException(status_code=404, detail="Session not found")
     events_path = session_dir / "events.jsonl"
@@ -39,19 +40,20 @@ async def list_sessions() -> list[SessionSummary]:
         return discover_sessions()
     except Exception as exc:
         logger.exception("Failed to discover sessions")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get("/{session_id}", response_model=Session)
 async def get_session_detail(session_id: str) -> Session:
     """Get full metadata for a single session."""
+    validate_session_id(session_id)
     try:
         return get_session(session_id)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
     except Exception as exc:
         logger.exception("Failed to get session %s", session_id)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get("/{session_id}/events", response_model=list[Event])
@@ -64,7 +66,7 @@ async def get_session_events(session_id: str) -> list[Event]:
         return events
     except Exception as exc:
         logger.exception("Failed to parse events for session %s", session_id)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get("/{session_id}/stats", response_model=SessionStats)
@@ -76,7 +78,7 @@ async def get_session_stats(session_id: str) -> SessionStats:
         return compute_stats(events)
     except Exception as exc:
         logger.exception("Failed to compute stats for session %s", session_id)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 def _tree_to_dict(node: TreeNode) -> dict:
@@ -104,4 +106,4 @@ async def get_session_tree(session_id: str) -> JSONResponse:
         return JSONResponse(content=[_tree_to_dict(r) for r in roots])
     except Exception as exc:
         logger.exception("Failed to build tree for session %s", session_id)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc

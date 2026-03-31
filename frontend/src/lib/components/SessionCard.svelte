@@ -38,7 +38,7 @@
 		display: flex;
 		width: 100%;
 		padding: 0;
-		margin: 0 0 2px;
+		margin: 0 0 1px;
 		cursor: pointer;
 		background: transparent;
 		border: none;
@@ -52,19 +52,26 @@
 
 	.session-card:hover {
 		background: var(--bg-hover);
-		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 	}
 
 	.session-card:focus-visible {
-		box-shadow: inset 0 0 0 1px var(--border-active);
+		box-shadow: inset 0 0 0 1px var(--border-active), 0 0 0 1px var(--border-active);
+	}
+
+	.session-card:active {
+		background: var(--bg-active);
+		transition-duration: 0.05s;
 	}
 
 	.session-card.selected {
 		background: rgba(9, 71, 113, 0.45);
+		box-shadow: inset 0 0 0 1px rgba(0, 122, 204, 0.15);
 	}
 
 	.session-card.selected:hover {
 		background: rgba(9, 71, 113, 0.55);
+		box-shadow: inset 0 0 0 1px rgba(0, 122, 204, 0.25);
 	}
 
 	.card-accent {
@@ -73,15 +80,17 @@
 		flex-shrink: 0;
 		border-radius: 0 2px 2px 0;
 		background: transparent;
-		transition: background 0.2s ease;
+		transition: background 0.2s ease, box-shadow 0.2s ease;
 	}
 
 	.session-card.selected .card-accent {
 		background: var(--border-active);
+		box-shadow: 0 0 6px rgba(0, 122, 204, 0.4);
 	}
 
 	.card-accent.accent-live {
 		background: var(--green-bright);
+		box-shadow: 0 0 6px rgba(115, 201, 145, 0.3);
 	}
 
 	.session-card.selected .card-accent.accent-live {
@@ -131,6 +140,7 @@
 
 	.card-summary {
 		font-size: 12px;
+		font-weight: 500;
 		color: var(--text-primary);
 		line-height: 1.35;
 		overflow: hidden;
@@ -139,6 +149,10 @@
 		-webkit-line-clamp: 2;
 		-webkit-box-orient: vertical;
 		flex: 1;
+	}
+
+	.session-card.selected .card-summary {
+		color: var(--text-bright);
 	}
 
 	.card-meta {

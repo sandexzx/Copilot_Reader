@@ -13,6 +13,12 @@ from fastapi.testclient import TestClient
 
 from backend.main import app
 
+# Valid UUIDs for test sessions
+WS_TEST_UUID = "c0000000-0000-0000-0000-000000000001"
+WS_PUSH_UUID = "c0000000-0000-0000-0000-000000000002"
+WS_MULTI_UUID = "c0000000-0000-0000-0000-000000000003"
+WS_NONEXIST_UUID = "c0000000-0000-0000-0000-000000000099"
+
 SAMPLE_WORKSPACE_YAML = """\
 id: ws-test-session
 cwd: /tmp/test
@@ -56,7 +62,7 @@ class TestWebSocketNonExistent:
 
             client = TestClient(app)
             with pytest.raises(Exception) as exc_info:
-                with client.websocket_connect("/ws/sessions/nonexistent/events"):
+                with client.websocket_connect(f"/ws/sessions/{WS_NONEXIST_UUID}/events"):
                     pass
             # FastAPI TestClient raises on WebSocket close with non-1000 code
 
@@ -68,16 +74,16 @@ class TestWebSocketNonExistent:
 
 class TestWebSocketConnectedMessage:
     def test_sends_connected_message(self, tmp_path: Path) -> None:
-        _make_session(tmp_path, "test-sess", event_lines=5)
+        _make_session(tmp_path, WS_TEST_UUID, event_lines=5)
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
             import backend.api.websocket as ws_mod
             ws_mod._manager = None
 
             client = TestClient(app)
-            with client.websocket_connect("/ws/sessions/test-sess/events") as ws:
+            with client.websocket_connect(f"/ws/sessions/{WS_TEST_UUID}/events") as ws:
                 msg = ws.receive_json()
                 assert msg["type"] == "connected"
-                assert msg["data"]["session_id"] == "test-sess"
+                assert msg["data"]["session_id"] == WS_TEST_UUID
                 assert msg["data"]["event_count"] == 5
 
 
@@ -88,13 +94,13 @@ class TestWebSocketConnectedMessage:
 
 class TestWebSocketEventPush:
     def test_new_events_pushed(self, tmp_path: Path) -> None:
-        session_dir = _make_session(tmp_path, "push-sess", event_lines=0)
+        session_dir = _make_session(tmp_path, WS_PUSH_UUID, event_lines=0)
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
             import backend.api.websocket as ws_mod
             ws_mod._manager = None
 
             client = TestClient(app)
-            with client.websocket_connect("/ws/sessions/push-sess/events") as ws:
+            with client.websocket_connect(f"/ws/sessions/{WS_PUSH_UUID}/events") as ws:
                 # Consume connected message
                 connected = ws.receive_json()
                 assert connected["type"] == "connected"
@@ -139,14 +145,14 @@ class TestWebSocketEventPush:
 
 class TestWebSocketMultipleClients:
     def test_multiple_clients_receive_events(self, tmp_path: Path) -> None:
-        session_dir = _make_session(tmp_path, "multi-sess", event_lines=0)
+        session_dir = _make_session(tmp_path, WS_MULTI_UUID, event_lines=0)
         with patch.dict(os.environ, {"COPILOT_SESSION_STATE_DIR": str(tmp_path)}):
             import backend.api.websocket as ws_mod
             ws_mod._manager = None
 
             client = TestClient(app)
-            with client.websocket_connect("/ws/sessions/multi-sess/events") as ws1:
-                with client.websocket_connect("/ws/sessions/multi-sess/events") as ws2:
+            with client.websocket_connect(f"/ws/sessions/{WS_MULTI_UUID}/events") as ws1:
+                with client.websocket_connect(f"/ws/sessions/{WS_MULTI_UUID}/events") as ws2:
                     # Consume connected messages
                     ws1.receive_json()
                     ws2.receive_json()
