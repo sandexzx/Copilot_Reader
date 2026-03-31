@@ -45,9 +45,14 @@ check_python() {
 }
 
 check_bun() {
+    # Bun is often installed in ~/.bun/bin and may not be in PATH
     if ! command -v bun &>/dev/null; then
-        error "Bun is not installed. Install it from https://bun.sh"
-        exit 1
+        if [[ -x "$HOME/.bun/bin/bun" ]]; then
+            export PATH="$HOME/.bun/bin:$PATH"
+        else
+            error "Bun is not installed. Install it from https://bun.sh"
+            exit 1
+        fi
     fi
     local bun_ver
     bun_ver=$(bun --version 2>/dev/null || echo "unknown")
@@ -65,6 +70,22 @@ fi
 
 PORT="${COPILOT_READER_PORT:-8000}"
 VITE_PORT=5173
+
+# ─── Virtual environment setup ──────────────────────────────────────────────
+VENV_DIR="$PROJECT_ROOT/.venv"
+
+setup_venv() {
+    if [[ ! -d "$VENV_DIR" ]]; then
+        info "Creating virtual environment in .venv …"
+        "$PYTHON" -m venv "$VENV_DIR"
+    fi
+    # shellcheck disable=SC1091
+    source "$VENV_DIR/bin/activate"
+    PYTHON="$VENV_DIR/bin/python"
+    info "Virtual environment activated ✓"
+}
+
+setup_venv
 
 # ─── Install Python dependencies ────────────────────────────────────────────
 install_python_deps() {
