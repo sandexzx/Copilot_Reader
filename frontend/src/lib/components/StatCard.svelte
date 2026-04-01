@@ -6,6 +6,7 @@
     accentColor?: string;
     animate?: boolean;
     index?: number;
+    hint?: string;
   }
 
   let {
@@ -15,6 +16,7 @@
     accentColor,
     animate,
     index = 0,
+    hint,
   }: Props = $props();
 
   let displayValue = $state<string | number>(0);
@@ -69,6 +71,8 @@
       : displayValue
   );
 
+  let showHint = $derived(hint && value === 0);
+
   let valueClass = $derived(
     color === 'accent' ? 'stat-value accent' :
     color === 'green' ? 'stat-value green' :
@@ -83,6 +87,9 @@
 >
   <div class="stat-label">{label}</div>
   <div class={valueClass}>{formattedValue}</div>
+  {#if showHint}
+    <div class="stat-hint">ℹ {hint}</div>
+  {/if}
 </div>
 
 <style>
@@ -147,6 +154,14 @@
 
   .stat-value.green {
     color: var(--green-bright);
+  }
+
+  .stat-hint {
+    font-size: 9px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    line-height: 1.3;
+    opacity: 0.7;
   }
 
   @media (prefers-reduced-motion: reduce) {

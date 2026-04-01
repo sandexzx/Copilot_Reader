@@ -1,10 +1,17 @@
 <script lang="ts">
   import StatCard from './StatCard.svelte';
   import { eventsStore } from '$lib/stores/events.svelte';
+  import { sessionsStore } from '$lib/stores/sessions.svelte';
 
   let stats = $derived(eventsStore.stats);
   let loading = $derived(eventsStore.isLoading);
   let animKey = $state(0);
+
+  let isActive = $derived(
+    sessionsStore.sessions.find(s => s.id === sessionsStore.selectedSessionId)?.is_active ?? false
+  );
+
+  const TOKEN_HINT = 'Данные появятся после завершения сессии';
 
   let prevStatsRef = $state<typeof stats>(null);
 
@@ -83,9 +90,9 @@
     <div class="stat-grid">
       <StatCard label="Model" value={modelDisplay} color="accent" accentColor="var(--blue)" animate={false} index={0} />
       <StatCard label="Duration" value={formatDuration(stats.duration_seconds)} color="green" accentColor="var(--cyan)" animate={false} index={1} />
-      <StatCard label="Tokens In" value={stats.input_tokens} color="green" accentColor="var(--blue)" index={2} />
-      <StatCard label="Tokens Out" value={stats.output_tokens} color="green" accentColor="var(--purple)" index={3} />
-      <StatCard label="Cache Read" value={stats.cache_read_tokens} color="green" accentColor="var(--green)" index={4} />
+      <StatCard label="Tokens In" value={stats.input_tokens} color="green" accentColor="var(--blue)" index={2} hint={isActive ? TOKEN_HINT : undefined} />
+      <StatCard label="Tokens Out" value={stats.output_tokens} color="green" accentColor="var(--purple)" index={3} hint={isActive ? TOKEN_HINT : undefined} />
+      <StatCard label="Cache Read" value={stats.cache_read_tokens} color="green" accentColor="var(--green)" index={4} hint={isActive ? TOKEN_HINT : undefined} />
       <StatCard label="Tool Calls" value={stats.tool_calls} color="green" accentColor="var(--orange)" index={5} />
       <StatCard label="User Messages" value={stats.user_messages} color="green" accentColor="var(--green)" index={6} />
       <StatCard label="Assistant Turns" value={stats.assistant_turns} color="green" accentColor="var(--purple)" index={7} />
