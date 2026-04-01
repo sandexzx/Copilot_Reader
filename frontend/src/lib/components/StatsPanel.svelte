@@ -5,22 +5,12 @@
 
   let stats = $derived(eventsStore.stats);
   let loading = $derived(eventsStore.isLoading);
-  let animKey = $state(0);
 
   let isActive = $derived(
     sessionsStore.sessions.find(s => s.id === sessionsStore.selectedSessionId)?.is_active ?? false
   );
 
   const TOKEN_HINT = 'Данные появятся после завершения сессии';
-
-  let prevStatsRef = $state<typeof stats>(null);
-
-  $effect(() => {
-    if (stats && stats !== prevStatsRef) {
-      prevStatsRef = stats;
-      animKey++;
-    }
-  });
 
   function formatDuration(seconds: number): string {
     if (seconds < 60) return `${Math.round(seconds)}s`;
@@ -52,16 +42,6 @@
   let maxTokens = $derived(
     Math.max(...bars.map(b => b.amount), 1)
   );
-
-  let mounted = $state(false);
-
-  $effect(() => {
-    if (stats) {
-      // Trigger bar animation after a tick
-      mounted = false;
-      requestAnimationFrame(() => { mounted = true; });
-    }
-  });
 </script>
 
 {#if loading && !stats}
@@ -86,7 +66,6 @@
 {:else if !stats}
   <div class="stats-empty">Выберите сессию для просмотра статистики</div>
 {:else}
-  {#key animKey}
     <div class="stat-grid">
       <StatCard label="Model" value={modelDisplay} color="accent" accentColor="var(--blue)" animate={false} index={0} />
       <StatCard label="Duration" value={formatDuration(stats.duration_seconds)} color="green" accentColor="var(--cyan)" animate={false} index={1} />
@@ -107,7 +86,7 @@
             <div class="bar-track">
               <div
                 class="bar-fill"
-                style="width: {mounted ? (bar.amount / maxTokens) * 100 : 0}%; background: {bar.color}"
+                style="width: {(bar.amount / maxTokens) * 100}%; background: {bar.color}"
               ></div>
             </div>
             <span class="bar-amount">{bar.amount.toLocaleString()}</span>
@@ -115,7 +94,6 @@
         {/each}
       </div>
     </div>
-  {/key}
 {/if}
 
 <style>

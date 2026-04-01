@@ -33,16 +33,16 @@
     }
 
     const target = val;
-    if (target === 0) {
-      displayValue = 0;
+    const from = typeof displayValue === 'number' ? displayValue : 0;
+
+    if (target === from) {
+      displayValue = target;
       return;
     }
 
-    const duration = 1200;
+    const duration = 800;
     const startTime = performance.now();
     let frame = 0;
-
-    displayValue = 0;
 
     function easeOutCubic(t: number): number {
       return 1 - Math.pow(1 - t, 3);
@@ -52,7 +52,7 @@
       const elapsed = now - startTime;
       const progress = Math.min(elapsed / duration, 1);
       const eased = easeOutCubic(progress);
-      displayValue = Math.round(eased * target);
+      displayValue = Math.round(from + (target - from) * eased);
       if (progress < 1) {
         frame = requestAnimationFrame(tick);
       }
