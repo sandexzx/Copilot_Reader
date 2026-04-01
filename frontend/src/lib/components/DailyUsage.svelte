@@ -6,6 +6,12 @@
   let expanded = $state(true);
   let loading = $state(false);
 
+  // Pricing per 1M tokens (USD)
+  const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+    'claude-opus-4.6': { input: 5, output: 25 },
+  };
+  const USD_TO_RUB = 81.25;
+
   function formatTokens(n: number): string {
     if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
     if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
@@ -14,6 +20,25 @@
 
   function shortenModel(name: string): string {
     return name.replace(/^claude-/, '');
+  }
+
+  let totalCostUsd = $derived.by(() => {
+    if (!data) return 0;
+    let cost = 0;
+    for (const [model, usage] of Object.entries(data.models)) {
+      const pricing = MODEL_PRICING[model];
+      if (!pricing) continue;
+      cost += (usage.input_tokens / 1_000_000) * pricing.input;
+      cost += (usage.output_tokens / 1_000_000) * pricing.output;
+    }
+    return cost;
+  });
+
+  let totalCostRub = $derived(totalCostUsd * USD_TO_RUB);
+
+  function formatCost(n: number): string {
+    if (n < 0.01) return '< 0.01';
+    return n.toFixed(2);
   }
 
   async function loadData() {
@@ -77,6 +102,12 @@
             <span class="token cache">⚡{formatTokens(data.totals.cache_read_tokens)}</span>
           </div>
         </div>
+        {#if totalCostUsd > 0}
+          <div class="cost-row">
+            <span class="cost-label">💰 Cost</span>
+            <span class="cost-value">${formatCost(totalCostUsd)} · {formatCost(totalCostRub)}₽</span>
+          </div>
+        {/if}
       </div>
     {/if}
   {/if}
@@ -235,5 +266,26 @@
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+  }
+
+  .cost-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 3px 4px 0;
+    margin-top: 2px;
+  }
+
+  .cost-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .cost-value {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--orange);
   }
 </style>

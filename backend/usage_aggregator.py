@@ -13,6 +13,62 @@ from .session_manager import _get_session_state_dir, get_session_metadata
 logger = logging.getLogger(__name__)
 
 
+def _read_partial_metrics(events_path: Path) -> dict[str, int] | None:
+    """Extract partial token data from events for sessions without shutdown.
+
+    Returns a dict mapping model_name -> output_tokens.
+    Uses interactionId to correlate assistant.message (has outputTokens)
+    with tool.execution_complete (has model name).
+    """
+    try:
+        with open(events_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+    except (OSError, IOError):
+        return None
+
+    interaction_models: dict[str, str] = {}
+    interaction_output: dict[str, int] = {}
+    current_model = ""
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+        event_type = event.get("type", "")
+        data = event.get("data", {})
+
+        if event_type == "tool.execution_complete":
+            model = data.get("model", "")
+            interaction_id = data.get("interactionId", "")
+            if model:
+                current_model = model
+                if interaction_id:
+                    interaction_models[interaction_id] = model
+
+        elif event_type == "assistant.message":
+            out = data.get("outputTokens", 0)
+            interaction_id = data.get("interactionId", "")
+            if out and interaction_id:
+                interaction_output[interaction_id] = (
+                    interaction_output.get(interaction_id, 0) + out
+                )
+
+    if not interaction_output:
+        return None
+
+    model_tokens: dict[str, int] = {}
+    for iid, tokens in interaction_output.items():
+        model = interaction_models.get(iid, current_model or "unknown")
+        model_tokens[model] = model_tokens.get(model, 0) + tokens
+
+    return model_tokens if model_tokens else None
+
+
 def _read_shutdown_metrics(events_path: Path) -> dict | None:
     """Extract modelMetrics from the session.shutdown event.
 
@@ -84,6 +140,13 @@ async def get_daily_usage() -> DailyUsageResponse:
 
         model_metrics = _read_shutdown_metrics(events_path)
         if not model_metrics:
+            # For sessions without shutdown (active/crashed), extract partial data
+            partial = _read_partial_metrics(events_path)
+            if partial:
+                for model_name, out_tokens in partial.items():
+                    if model_name not in models:
+                        models[model_name] = ModelUsage()
+                    models[model_name].output_tokens += out_tokens
             continue
 
         for model_name, metrics in model_metrics.items():

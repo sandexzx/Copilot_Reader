@@ -422,6 +422,10 @@ def compute_stats(events: list[Event]) -> SessionStats:
         dt = (events[-1].timestamp - events[0].timestamp).total_seconds()
         duration_seconds = max(dt, 0.0)
 
+    # Track partial token data for active sessions (no shutdown event)
+    partial_output_tokens = 0
+    partial_models: set[str] = set()
+
     # Count event types
     for ev in events:
         if ev.type == "tool.execution_start":
@@ -430,6 +434,13 @@ def compute_stats(events: list[Event]) -> SessionStats:
             user_messages += 1
         elif ev.type == "assistant.turn_start":
             assistant_turns += 1
+
+        if ev.type == "assistant.message":
+            partial_output_tokens += ev.data.get("outputTokens", 0)
+        elif ev.type == "tool.execution_complete":
+            model = ev.data.get("model", "")
+            if model:
+                partial_models.add(model)
 
     # Extract shutdown data if present
     for ev in events:
@@ -459,6 +470,12 @@ def compute_stats(events: list[Event]) -> SessionStats:
             if current_model and current_model not in models_used:
                 models_used.append(current_model)
             break
+
+    # Fallback to partial data for active sessions (no shutdown event)
+    if not models_used and partial_models:
+        models_used = sorted(partial_models)
+    if output_tokens == 0 and partial_output_tokens > 0:
+        output_tokens = partial_output_tokens
 
     return SessionStats(
         total_events=total_events,
