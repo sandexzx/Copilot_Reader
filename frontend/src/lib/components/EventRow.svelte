@@ -11,6 +11,7 @@
 	let color = $derived(getEventColor(event.type));
 	let bgColor = $derived(getEventBgColor(event.type));
 	let category = $derived(getEventCategory(event.type));
+	let isSubagent = $derived(event.type.startsWith('subagent.'));
 	let detailHtml = $derived(colorizeJson(event.data));
 	let model = $derived((event.data?.model ?? event.data?.currentModel ?? '') as string);
 
@@ -117,7 +118,7 @@
 		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
 	>
 		<span class="event-time">{timestamp}</span>
-		<span class="event-badge" style="color: {color}; background: {bgColor};">
+		<span class="event-badge" class:neon-subagent={isSubagent} style="color: {color}; background: {bgColor};">
 			{event.type}
 		</span>
 		{#if model}
@@ -206,6 +207,27 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.event-badge.neon-subagent {
+		box-shadow:
+			0 0 4px 1px rgba(78, 201, 176, 0.4),
+			0 0 10px 2px rgba(78, 201, 176, 0.2);
+		border: 1px solid rgba(78, 201, 176, 0.3);
+		animation: subagentPulse 2s ease-in-out infinite;
+	}
+
+	@keyframes subagentPulse {
+		0%, 100% {
+			box-shadow:
+				0 0 4px 1px rgba(78, 201, 176, 0.4),
+				0 0 10px 2px rgba(78, 201, 176, 0.2);
+		}
+		50% {
+			box-shadow:
+				0 0 6px 2px rgba(78, 201, 176, 0.6),
+				0 0 14px 4px rgba(78, 201, 176, 0.3);
+		}
 	}
 
 	.model-chip {
@@ -407,6 +429,9 @@
 		.freshness-dot.is-new {
 			animation: none;
 			background: #3a3a3a;
+		}
+		.event-badge.neon-subagent {
+			animation: none;
 		}
 	}
 </style>
