@@ -236,6 +236,28 @@ def _derive_brief_description(event: Event, semantic_kind: str) -> str | None:
     if semantic_kind == "turn":
         return _format_turn_description(event)
 
+    if semantic_kind == "tool":
+        tool_name = event.tool_name or _get_text(event.data, "toolName", "tool_name")
+        args = event.data.get("arguments")
+        if isinstance(args, dict):
+            if tool_name == "bash":
+                cmd = _get_text(args, "command")
+                if cmd:
+                    return f"$ {_truncate_text(cmd, 80)}"
+            elif tool_name == "grep":
+                pattern = _get_text(args, "pattern")
+                if pattern:
+                    path = _get_text(args, "path")
+                    path_short = path.rsplit("/", 1)[-1] if path else None
+                    desc = f"/{_truncate_text(pattern, 40)}/"
+                    if path_short:
+                        desc += f" in {path_short}"
+                    return desc
+            elif tool_name == "glob":
+                pattern = _get_text(args, "pattern")
+                if pattern:
+                    return _truncate_text(pattern, 80)
+
     content = _get_text(event.data, "content", "message", "intent", "description")
     if content:
         return _truncate_text(content)

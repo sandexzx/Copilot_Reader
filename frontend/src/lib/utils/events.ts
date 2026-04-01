@@ -83,13 +83,67 @@ export function formatEventDescription(event: Event): string {
 		}
 		case 'tool.execution_start': {
 			const name = str(d.toolName ?? d.tool_name ?? d.name ?? '');
+			const args = d.arguments as Record<string, unknown> | undefined;
+			if (name === 'bash' && args) {
+				const cmd = str(args.command ?? '');
+				const argDesc = str(args.description ?? '');
+				if (cmd) {
+					const cmdPart = `$ ${truncate(cmd, 70)}`;
+					return argDesc ? `bash → ${truncate(argDesc, 40)} | ${cmdPart}` : `bash → ${cmdPart}`;
+				}
+			}
+			if (name === 'grep' && args) {
+				const pattern = str(args.pattern ?? '');
+				if (pattern) {
+					let result = `grep → /${truncate(pattern, 50)}/`;
+					const searchPath = str(args.path ?? '');
+					if (searchPath) {
+						const segments = searchPath.split('/');
+						result += ` in ${segments[segments.length - 1]}`;
+					}
+					if (args.glob) result += ' (glob)';
+					const mode = str(args.output_mode ?? '');
+					if (mode && mode !== 'files_with_matches') result += ` [${mode}]`;
+					return result;
+				}
+			}
+			if (name === 'glob' && args) {
+				const pattern = str(args.pattern ?? '');
+				if (pattern) {
+					let result = `glob → ${truncate(pattern, 60)}`;
+					const searchPath = str(args.path ?? '');
+					if (searchPath) {
+						const segments = searchPath.split('/');
+						result += ` in ${segments[segments.length - 1]}`;
+					}
+					return result;
+				}
+			}
 			const desc = str(d.description ?? d.input ?? '');
 			if (name && desc) return `${name} → ${truncate(desc, 80)}`;
 			return name || 'Tool started';
 		}
 		case 'tool.execution_complete': {
-			const name = str(d.toolName ?? d.tool_name ?? d.name ?? '');
+			const name = str(d.toolName ?? d.tool_name ?? event.tool_name ?? d.name ?? '');
 			const failed = d.error || d.failed || d.exitCode;
+			if (name === 'bash') {
+				if (failed) {
+					const exitCode = d.exitCode;
+					return typeof exitCode === 'number' ? `bash ✗ exit ${exitCode}` : 'bash ✗ failed';
+				}
+				return 'bash ✓';
+			}
+			if (name === 'grep' && !failed) {
+				const result = d.result as Record<string, unknown> | undefined;
+				const content = str(result?.content ?? '');
+				if (content) {
+					const lines = content.split('\n').filter((l) => l.trim() !== '');
+					const count = lines.length;
+					const noun = count === 1 ? 'match' : 'matches';
+					return `grep ✓ — ${count} ${noun}`;
+				}
+				return 'grep ✓';
+			}
 			return name ? `${name} ${failed ? '✗ failed' : '✓'}` : 'Tool completed';
 		}
 		case 'subagent.started': {

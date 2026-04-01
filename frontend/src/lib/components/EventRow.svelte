@@ -17,12 +17,38 @@
 	let fileChip = $derived.by(() => {
 		const d = event.data;
 		const toolName = (d?.toolName ?? d?.tool_name ?? event.tool_name ?? '') as string;
-		if (['edit', 'view', 'create'].includes(toolName)) {
+		if (['edit', 'view', 'create', 'grep', 'glob'].includes(toolName)) {
 			const args = d?.arguments as Record<string, unknown> | undefined;
 			const path = (args?.path ?? d?.path ?? '') as string;
 			if (path) {
 				const parts = path.split('/');
 				return parts[parts.length - 1];
+			}
+		}
+		return '';
+	});
+
+	let commandChip = $derived.by(() => {
+		const d = event.data;
+		const toolName = (d?.toolName ?? d?.tool_name ?? event.tool_name ?? '') as string;
+		if (toolName === 'bash' && event.type === 'tool.execution_start') {
+			const args = d?.arguments as Record<string, unknown> | undefined;
+			const cmd = (args?.command ?? '') as string;
+			if (cmd) {
+				return cmd.length > 50 ? cmd.slice(0, 50) + '…' : cmd;
+			}
+		}
+		return '';
+	});
+
+	let patternChip = $derived.by(() => {
+		const d = event.data;
+		const toolName = (d?.toolName ?? d?.tool_name ?? event.tool_name ?? '') as string;
+		if (toolName === 'grep' && event.type === 'tool.execution_start') {
+			const args = d?.arguments as Record<string, unknown> | undefined;
+			const pattern = (args?.pattern ?? '') as string;
+			if (pattern) {
+				return pattern.length > 40 ? pattern.slice(0, 40) + '…' : pattern;
 			}
 		}
 		return '';
@@ -51,6 +77,12 @@
 		{/if}
 		{#if fileChip}
 			<span class="file-chip">📄 {fileChip}</span>
+		{/if}
+		{#if commandChip}
+			<span class="command-chip">$ {commandChip}</span>
+		{/if}
+		{#if patternChip}
+			<span class="pattern-chip">/{patternChip}/</span>
 		{/if}
 		<span class="event-desc">{description}</span>
 		<span class="event-expand">{expanded ? '▾' : '▸'}</span>
@@ -141,6 +173,36 @@
 		white-space: nowrap;
 		font-family: var(--font-mono);
 		max-width: 180px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.command-chip {
+		padding: 1px 6px;
+		border-radius: 3px;
+		font-size: 9px;
+		font-weight: 500;
+		color: var(--green, #4ec9b0);
+		background: rgba(78, 201, 176, 0.12);
+		flex-shrink: 0;
+		white-space: nowrap;
+		font-family: var(--font-mono);
+		max-width: 260px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.pattern-chip {
+		padding: 1px 6px;
+		border-radius: 3px;
+		font-size: 9px;
+		font-weight: 500;
+		color: var(--yellow, #dcdcaa);
+		background: rgba(220, 220, 170, 0.12);
+		flex-shrink: 0;
+		white-space: nowrap;
+		font-family: var(--font-mono);
+		max-width: 200px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
