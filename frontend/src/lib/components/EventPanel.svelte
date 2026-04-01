@@ -4,6 +4,9 @@
 
   let { events = [] as Event[] } = $props();
 
+  const HIDDEN_TYPES = new Set(['assistant.turn_start', 'assistant.turn_end']);
+  let visibleEvents = $derived(events.filter(e => !HIDDEN_TYPES.has(e.type)));
+
   let scrollContainer: HTMLDivElement | undefined = $state(undefined);
   let autoScroll = $state(true);
   let hasNewEvents = $state(false);
@@ -26,8 +29,8 @@
   }
 
   $effect(() => {
-    const count = events.length;
-    const firstId = events.length > 0 ? events[0].id : null;
+    const count = visibleEvents.length;
+    const firstId = visibleEvents.length > 0 ? visibleEvents[0].id : null;
     const isNewSession = firstId !== prevFirstEventId && firstId !== null;
 
     if (isNewSession) {
@@ -54,7 +57,7 @@
 <div class="event-panel">
   <div class="event-panel-header">
     <span class="title">Event Stream</span>
-    <span class="event-count">{events.length}</span>
+    <span class="event-count">{visibleEvents.length}</span>
     <span class="auto-scroll-indicator">
       {autoScroll ? 'Auto-scroll ✓' : 'Auto-scroll paused'}
     </span>
@@ -64,12 +67,12 @@
     bind:this={scrollContainer}
     onscroll={handleScroll}
   >
-    {#if events.length === 0}
+    {#if visibleEvents.length === 0}
       <div class="event-stream-empty">
         Waiting for events…
       </div>
     {:else}
-      {#each events as event (event.id)}
+      {#each visibleEvents as event (event.id)}
         <EventRow {event} />
       {/each}
     {/if}

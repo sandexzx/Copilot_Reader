@@ -9,6 +9,7 @@ class EventsStore {
 	tree = $state<TreeNode[]>([]);
 	isLoading = $state(false);
 	error = $state<string | null>(null);
+	private eventIds = new Set<string>();
 
 	async loadEvents(sessionId: string): Promise<void> {
 		this.isLoading = true;
@@ -22,6 +23,7 @@ class EventsStore {
 			this.events = events;
 			this.stats = stats;
 			this.tree = tree;
+			this.eventIds = new Set(events.map(e => e.id));
 		} catch (e) {
 			this.error = e instanceof Error ? e.message : 'Failed to load events';
 		} finally {
@@ -30,6 +32,8 @@ class EventsStore {
 	}
 
 	appendEvent(event: Event): void {
+		if (this.eventIds.has(event.id)) return;
+		this.eventIds.add(event.id);
 		this.events = [...this.events, event];
 	}
 }

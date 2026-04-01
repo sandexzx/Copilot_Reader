@@ -32,12 +32,11 @@
     sessionsStore.sessions.find(s => s.id === sessionsStore.selectedSessionId) ?? null
   );
 
-  function handleSessionSelect(session) {
-    eventsStore.loadEvents(session.id);
+  async function handleSessionSelect(session) {
+    websocketStore.disconnect();
+    await eventsStore.loadEvents(session.id);
     if (session.is_active) {
       websocketStore.connect(session.id);
-    } else {
-      websocketStore.disconnect();
     }
   }
 
