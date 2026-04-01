@@ -5,7 +5,13 @@
   let { events = [] as Event[] } = $props();
 
   const HIDDEN_TYPES = new Set(['assistant.turn_start', 'assistant.turn_end']);
-  let visibleEvents = $derived(events.filter(e => !HIDDEN_TYPES.has(e.type)));
+  const HIDDEN_TOOLS = new Set(['read_agent']);
+  let visibleEvents = $derived(events.filter(e => {
+    if (HIDDEN_TYPES.has(e.type)) return false;
+    const toolName = (e.data?.toolName ?? e.data?.tool_name ?? e.tool_name ?? '') as string;
+    if (HIDDEN_TOOLS.has(toolName)) return false;
+    return true;
+  }));
 
   let scrollContainer: HTMLDivElement | undefined = $state(undefined);
   let autoScroll = $state(true);
