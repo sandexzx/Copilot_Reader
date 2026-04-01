@@ -27,12 +27,23 @@
     };
   });
 
+  // Auto-select the most recent session on first load
+  let initialAutoSelect = $state(true);
+  $effect(() => {
+    if (initialAutoSelect && sessionsStore.sessions.length > 0 && !sessionsStore.selectedSessionId) {
+      initialAutoSelect = false;
+      const latest = sessionsStore.sessions[0];
+      handleSessionSelect(latest);
+    }
+  });
+
   // Derived state for header
   let selectedSession = $derived(
     sessionsStore.sessions.find(s => s.id === sessionsStore.selectedSessionId) ?? null
   );
 
   async function handleSessionSelect(session) {
+    sessionsStore.selectSession(session.id);
     websocketStore.disconnect();
     await eventsStore.loadEvents(session.id);
     if (session.is_active) {
