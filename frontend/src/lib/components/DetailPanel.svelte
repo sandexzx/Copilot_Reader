@@ -2,12 +2,6 @@
   import StatsPanel from './StatsPanel.svelte';
   import EventTree from './EventTree.svelte';
 
-  interface Props {
-    sessionId?: string | null;
-  }
-
-  let { sessionId = null }: Props = $props();
-
   const tabs = ['Statistics', 'Tree View', 'Raw JSON'];
   let activeTab = $state('Statistics');
 </script>
@@ -27,11 +21,11 @@
   <div class="tab-content">
     {#if activeTab === 'Statistics'}
       <div class="tab-pane">
-        <StatsPanel {sessionId} />
+        <StatsPanel />
       </div>
     {:else if activeTab === 'Tree View'}
       <div class="tab-pane">
-        <EventTree {sessionId} />
+        <EventTree />
       </div>
     {:else if activeTab === 'Raw JSON'}
       <div class="tab-pane">

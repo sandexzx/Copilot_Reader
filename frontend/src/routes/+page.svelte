@@ -78,7 +78,7 @@
     <ResizeHandle onresize={handleResize} />
 
     <div class="detail-panel-wrapper" style="flex: {detailPanelFlex}">
-      <DetailPanel sessionId={sessionsStore.selectedSessionId} />
+      <DetailPanel />
     </div>
   </div>
 </main>

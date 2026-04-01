@@ -36,8 +36,6 @@ def _resolve_events_path(session_id: str):
     if not session_dir.is_dir():
         raise HTTPException(status_code=404, detail="Session not found")
     events_path = session_dir / "events.jsonl"
-    if not events_path.is_file():
-        raise HTTPException(status_code=404, detail="Session not found")
     return events_path
 
 
@@ -78,6 +76,8 @@ async def get_session_detail(session_id: str) -> Session:
 async def get_session_events(session_id: str) -> list[Event]:
     """Get parsed and correlated events for a session."""
     events_path = _resolve_events_path(session_id)
+    if not events_path.is_file():
+        return []
     try:
         events = parse_events_file(events_path)
         correlate_tool_names(events)
@@ -91,6 +91,8 @@ async def get_session_events(session_id: str) -> list[Event]:
 async def get_session_stats(session_id: str) -> SessionStats:
     """Get computed statistics for a session."""
     events_path = _resolve_events_path(session_id)
+    if not events_path.is_file():
+        return SessionStats()
     try:
         events = parse_events_file(events_path)
         return compute_stats(events)
@@ -117,6 +119,8 @@ def _tree_to_dict(node: TreeNode) -> dict:
 async def get_session_tree(session_id: str) -> JSONResponse:
     """Get nested event tree for a session."""
     events_path = _resolve_events_path(session_id)
+    if not events_path.is_file():
+        return JSONResponse(content=[])
     try:
         events = parse_events_file(events_path)
         correlate_tool_names(events)

@@ -1,48 +1,18 @@
 <script lang="ts">
   import StatCard from './StatCard.svelte';
-  import { fetchSessionStats } from '$lib/api';
-  import type { SessionStats } from '$lib/types';
+  import { eventsStore } from '$lib/stores/events.svelte';
 
-  interface Props {
-    sessionId: string | null;
-  }
-
-  let { sessionId }: Props = $props();
-
-  let stats = $state<SessionStats | null>(null);
-  let loading = $state(false);
-  let error = $state<string | null>(null);
+  let stats = $derived(eventsStore.stats);
+  let loading = $derived(eventsStore.isLoading);
   let animKey = $state(0);
 
+  let prevStatsRef = $state<typeof stats>(null);
+
   $effect(() => {
-    if (!sessionId) {
-      stats = null;
-      loading = false;
-      error = null;
-      return;
-    }
-
-    const id = sessionId;
-    let cancelled = false;
-
-    loading = true;
-    error = null;
-    stats = null;
-
-    fetchSessionStats(id).then((result) => {
-      if (cancelled) return;
-      stats = result;
+    if (stats && stats !== prevStatsRef) {
+      prevStatsRef = stats;
       animKey++;
-      loading = false;
-    }).catch((e) => {
-      if (cancelled) return;
-      error = e instanceof Error ? e.message : 'Failed to load stats';
-      loading = false;
-    });
-
-    return () => {
-      cancelled = true;
-    };
+    }
   });
 
   function formatDuration(seconds: number): string {
@@ -87,9 +57,7 @@
   });
 </script>
 
-{#if !sessionId}
-  <div class="stats-empty">Select a session to view statistics</div>
-{:else if loading}
+{#if loading && !stats}
   <div class="skeleton-grid">
     {#each Array(8) as _}
       <div class="skeleton-card">
@@ -108,9 +76,9 @@
       </div>
     {/each}
   </div>
-{:else if error}
-  <div class="stats-error">{error}</div>
-{:else if stats}
+{:else if !stats}
+  <div class="stats-empty">Выберите сессию для просмотра статистики</div>
+{:else}
   {#key animKey}
     <div class="stat-grid">
       <StatCard label="Model" value={modelDisplay} color="accent" accentColor="var(--blue)" animate={false} index={0} />
@@ -144,16 +112,11 @@
 {/if}
 
 <style>
-  .stats-empty,
-  .stats-error {
+  .stats-empty {
     color: var(--text-secondary);
     font-size: 11px;
     text-align: center;
     padding: 20px 0;
-  }
-
-  .stats-error {
-    color: var(--red);
   }
 
   .stat-grid {

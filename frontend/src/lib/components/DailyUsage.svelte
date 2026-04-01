@@ -1,10 +1,12 @@
 <script lang="ts">
   import { fetchDailyUsage } from '$lib/api';
+  import { eventsStore } from '$lib/stores/events.svelte';
   import type { DailyUsageResponse } from '$lib/types';
 
   let data = $state<DailyUsageResponse | null>(null);
   let expanded = $state(true);
   let loading = $state(false);
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Pricing per 1M tokens (USD)
   const MODEL_PRICING: Record<string, { input: number; output: number }> = {
@@ -52,10 +54,22 @@
     }
   }
 
+  // Periodic polling
   $effect(() => {
     loadData();
     const interval = setInterval(loadData, 30_000);
     return () => clearInterval(interval);
+  });
+
+  // Refresh on new WebSocket events (debounced 5s)
+  $effect(() => {
+    const _len = eventsStore.events.length;
+    if (_len === 0) return;
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(loadData, 5_000);
+    return () => {
+      if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+    };
   });
 
   function toggle() {

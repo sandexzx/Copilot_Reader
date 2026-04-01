@@ -75,7 +75,7 @@
   >
     {#if visibleEvents.length === 0}
       <div class="event-stream-empty">
-        Waiting for events…
+        Ожидаем первые события… Данные появятся автоматически.
       </div>
     {:else}
       {#each visibleEvents as event (event.id)}
