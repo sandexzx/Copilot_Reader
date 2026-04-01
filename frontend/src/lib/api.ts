@@ -1,6 +1,6 @@
 /** API client for Copilot Reader backend. */
 
-import type { Session, SessionSummary, Event, SessionStats, TreeNode } from './types';
+import type { Session, SessionSummary, Event, SessionStats, TreeNode, DailyUsageResponse } from './types';
 
 function getBaseUrl(): string {
 	if (typeof window === 'undefined') return 'http://localhost:8000';
@@ -45,4 +45,8 @@ export function fetchSessionEvents(id: string): Promise<Event[]> {
 
 export function fetchSessionTree(id: string): Promise<TreeNode[]> {
 	return apiFetch<TreeNode[]>(`/api/sessions/${id}/tree`);
+}
+
+export function fetchDailyUsage(): Promise<DailyUsageResponse> {
+	return apiFetch<DailyUsageResponse>('/api/sessions/stats/daily');
 }

@@ -72,6 +72,36 @@ class TreeNode(BaseModel):
     agent_name: str | None = None
 
 
+class ModelUsage(BaseModel):
+    """Per-model token usage counters."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    premium_requests: int = 0
+    requests_count: int = 0
+
+
+class DailyUsageTotals(BaseModel):
+    """Aggregated totals across all models."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    premium_requests: int = 0
+
+
+class DailyUsageResponse(BaseModel):
+    """Daily usage aggregation response."""
+
+    date: str  # ISO date "2026-04-01"
+    sessions_count: int = 0
+    models: dict[str, ModelUsage] = Field(default_factory=dict)
+    totals: DailyUsageTotals = Field(default_factory=DailyUsageTotals)
+
+
 class WebSocketMessage(BaseModel):
     """Messages sent over WebSocket."""
 

@@ -57,3 +57,27 @@ export interface WebSocketMessage {
 	type: string;
 	data: Record<string, unknown>;
 }
+
+export interface ModelUsage {
+	input_tokens: number;
+	output_tokens: number;
+	cache_read_tokens: number;
+	cache_write_tokens: number;
+	premium_requests: number;
+	requests_count: number;
+}
+
+export interface DailyUsageTotals {
+	input_tokens: number;
+	output_tokens: number;
+	cache_read_tokens: number;
+	cache_write_tokens: number;
+	premium_requests: number;
+}
+
+export interface DailyUsageResponse {
+	date: string;
+	sessions_count: number;
+	models: Record<string, ModelUsage>;
+	totals: DailyUsageTotals;
+}

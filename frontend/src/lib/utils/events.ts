@@ -119,6 +119,25 @@ export function formatEventDescription(event: Event): string {
 					return result;
 				}
 			}
+			if (name === 'sql' && args) {
+				const desc = str(args.description ?? '');
+				const query = str(args.query ?? '');
+				if (desc && query) {
+					return `sql → ${truncate(desc, 40)} | ${truncate(query, 50)}`;
+				}
+				if (query) return `sql → ${truncate(query, 70)}`;
+				return desc ? `sql → ${truncate(desc, 70)}` : 'sql';
+			}
+			if (name === 'task' && args) {
+				const agentType = str(args.agent_type ?? '');
+				const desc = str(args.description ?? '');
+				const mode = str(args.mode ?? '');
+				const parts: string[] = ['task'];
+				if (agentType) parts.push(`→ ${agentType}`);
+				if (desc) parts.push(`"${truncate(desc, 40)}"`);
+				if (mode) parts.push(`[${mode}]`);
+				return parts.join(' ');
+			}
 			const desc = str(d.description ?? d.input ?? '');
 			if (name && desc) return `${name} → ${truncate(desc, 80)}`;
 			return name || 'Tool started';
@@ -143,6 +162,31 @@ export function formatEventDescription(event: Event): string {
 					return `grep ✓ — ${count} ${noun}`;
 				}
 				return 'grep ✓';
+			}
+			if (name === 'sql') {
+				const telemetry = d.toolTelemetry as Record<string, unknown> | undefined;
+				const props = telemetry?.properties as Record<string, unknown> | undefined;
+				const metrics = telemetry?.metrics as Record<string, unknown> | undefined;
+				const queryType = str(props?.queryType ?? '');
+				const rowsReturned = metrics?.rowsReturned as number | undefined;
+				const rowsAffected = metrics?.rowsAffected as number | undefined;
+
+				let desc = `sql ${failed ? '✗' : '✓'}`;
+				if (queryType) desc += ` ${queryType}`;
+				if (rowsReturned != null && rowsReturned > 0) desc += ` — ${rowsReturned} row${rowsReturned === 1 ? '' : 's'}`;
+				if (rowsAffected != null && rowsAffected > 0) desc += ` — ${rowsAffected} affected`;
+				return desc;
+			}
+			if (name === 'task') {
+				const telemetry = d.toolTelemetry as Record<string, unknown> | undefined;
+				const props = telemetry?.properties as Record<string, unknown> | undefined;
+				const agentType = str(props?.agent_type ?? '');
+				const agentId = str(props?.agent_id ?? '');
+
+				let desc = `task ${failed ? '✗' : '✓'}`;
+				if (agentType) desc += ` ${agentType}`;
+				if (agentId) desc += ` (${agentId})`;
+				return desc;
 			}
 			return name ? `${name} ${failed ? '✗ failed' : '✓'}` : 'Tool completed';
 		}

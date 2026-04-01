@@ -13,9 +13,17 @@ from ..event_parser import (
     correlate_tool_names,
     parse_events_file,
 )
-from ..models import Event, Session, SessionStats, SessionSummary, TreeNode
+from ..models import (
+    DailyUsageResponse,
+    Event,
+    Session,
+    SessionStats,
+    SessionSummary,
+    TreeNode,
+)
 from ..security import safe_session_dir, validate_session_id
 from ..session_manager import discover_sessions, get_session
+from ..usage_aggregator import get_daily_usage
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +48,16 @@ async def list_sessions() -> list[SessionSummary]:
         return discover_sessions()
     except Exception as exc:
         logger.exception("Failed to discover sessions")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
+@router.get("/stats/daily", response_model=DailyUsageResponse)
+async def get_daily_usage_stats() -> DailyUsageResponse:
+    """Get aggregated token usage for today's sessions."""
+    try:
+        return await get_daily_usage()
+    except Exception as exc:
+        logger.exception("Failed to compute daily usage stats")
         raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import SessionCard from './SessionCard.svelte';
+  import DailyUsage from './DailyUsage.svelte';
   import { sessionsStore } from '$lib/stores/sessions.svelte';
   import type { SessionSummary } from '$lib/types';
 
@@ -66,6 +67,8 @@
       oninput={handleSearchInput}
     />
   </div>
+
+  <DailyUsage />
 
   <div class="session-list">
     {#if sessionsStore.isLoading}

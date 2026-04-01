@@ -54,6 +54,54 @@
 		return '';
 	});
 
+	let sqlChip = $derived.by(() => {
+		const d = event.data;
+		const toolName = (d?.toolName ?? d?.tool_name ?? event.tool_name ?? '') as string;
+		if (toolName === 'sql' && event.type === 'tool.execution_start') {
+			const args = d?.arguments as Record<string, unknown> | undefined;
+			const query = (args?.query ?? '') as string;
+			if (query) {
+				return query.length > 60 ? query.slice(0, 60) + '…' : query;
+			}
+		}
+		return '';
+	});
+
+	let taskChip = $derived.by(() => {
+		const d = event.data;
+		const toolName = (d?.toolName ?? d?.tool_name ?? event.tool_name ?? '') as string;
+		if (toolName === 'task' && event.type === 'tool.execution_start') {
+			const args = d?.arguments as Record<string, unknown> | undefined;
+			const agentType = (args?.agent_type ?? '') as string;
+			const mode = (args?.mode ?? '') as string;
+			if (agentType) {
+				return mode ? `${agentType} (${mode})` : agentType;
+			}
+		}
+		return '';
+	});
+
+	let resultChip = $derived.by(() => {
+		if (event.type !== 'tool.execution_complete') return '';
+		const d = event.data;
+		const result = d?.result as Record<string, unknown> | undefined;
+		const content = (result?.content ?? '') as string;
+		if (content) {
+			const clean = content.replace(/\n/g, ' ').trim();
+			return clean.length > 80 ? clean.slice(0, 80) + '…' : clean;
+		}
+		return '';
+	});
+
+	let successIndicator = $derived.by(() => {
+		if (event.type !== 'tool.execution_complete') return '';
+		const d = event.data;
+		const success = d?.success;
+		if (success === true) return '✅';
+		if (success === false) return '❌';
+		return '';
+	});
+
 	function toggle() {
 		expanded = !expanded;
 	}
@@ -83,6 +131,15 @@
 		{/if}
 		{#if patternChip}
 			<span class="pattern-chip">/{patternChip}/</span>
+		{/if}
+		{#if sqlChip}
+			<span class="sql-chip" title={sqlChip}>🗃 {sqlChip}</span>
+		{/if}
+		{#if taskChip}
+			<span class="task-chip">🤖 {taskChip}</span>
+		{/if}
+		{#if resultChip}
+			<span class="result-chip" title={resultChip}>{successIndicator} {resultChip}</span>
 		{/if}
 		<span class="event-desc">{description}</span>
 		<span class="event-expand">{expanded ? '▾' : '▸'}</span>
@@ -205,6 +262,52 @@
 		max-width: 200px;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.sql-chip {
+		padding: 1px 6px;
+		border-radius: 3px;
+		font-size: 9px;
+		font-weight: 500;
+		color: #e8c56d;
+		background: rgba(232, 197, 109, 0.12);
+		flex-shrink: 0;
+		white-space: nowrap;
+		font-family: var(--font-mono);
+		max-width: 320px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.task-chip {
+		padding: 1px 6px;
+		border-radius: 3px;
+		font-size: 9px;
+		font-weight: 500;
+		color: var(--cyan);
+		background: rgba(156, 220, 254, 0.12);
+		flex-shrink: 0;
+		white-space: nowrap;
+		font-family: var(--font-mono);
+		max-width: 200px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.result-chip {
+		padding: 1px 6px;
+		border-radius: 3px;
+		font-size: 9px;
+		font-weight: 500;
+		color: var(--text-secondary);
+		background: rgba(106, 106, 106, 0.12);
+		flex-shrink: 1;
+		white-space: nowrap;
+		font-family: var(--font-mono);
+		max-width: 400px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		min-width: 0;
 	}
 
 	.event-desc {
