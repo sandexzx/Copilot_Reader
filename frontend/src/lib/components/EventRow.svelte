@@ -142,6 +142,7 @@
 			<span class="result-chip" title={resultChip}>{successIndicator} {resultChip}</span>
 		{/if}
 		<span class="event-desc">{description}</span>
+		<span class="freshness-dot" class:is-new={event.isNew}></span>
 		<span class="event-expand">{expanded ? '▾' : '▸'}</span>
 	</div>
 	{#if expanded}
@@ -360,5 +361,52 @@
 
 	.event-detail :global(.json-bool) {
 		color: var(--blue);
+	}
+
+	/* Freshness indicator dot */
+	.freshness-dot {
+		flex-shrink: 0;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: #3a3a3a;
+		align-self: center;
+	}
+
+	.freshness-dot.is-new {
+		animation:
+			freshnessColor 15s linear forwards,
+			freshnessGlow 15s linear forwards,
+			freshnessPulse 1.5s ease-in-out 2;
+	}
+
+	@keyframes freshnessColor {
+		0%   { background: #39ff14; }
+		20%  { background: #b8ff00; }
+		40%  { background: #ffe600; }
+		60%  { background: #ffaa00; }
+		80%  { background: #ff6600; }
+		100% { background: #3a3a3a; }
+	}
+
+	@keyframes freshnessGlow {
+		0%   { box-shadow: 0 0 8px 3px rgba(57, 255, 20, 0.7), 0 0 16px 6px rgba(57, 255, 20, 0.3); }
+		20%  { box-shadow: 0 0 7px 2px rgba(184, 255, 0, 0.6), 0 0 14px 5px rgba(184, 255, 0, 0.25); }
+		40%  { box-shadow: 0 0 6px 2px rgba(255, 230, 0, 0.5), 0 0 12px 4px rgba(255, 230, 0, 0.2); }
+		60%  { box-shadow: 0 0 4px 1px rgba(255, 170, 0, 0.4), 0 0 8px 3px rgba(255, 170, 0, 0.15); }
+		80%  { box-shadow: 0 0 2px 1px rgba(255, 102, 0, 0.2), 0 0 4px 2px rgba(255, 102, 0, 0.08); }
+		100% { box-shadow: none; }
+	}
+
+	@keyframes freshnessPulse {
+		0%, 100% { transform: scale(1); }
+		50%      { transform: scale(1.5); }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.freshness-dot.is-new {
+			animation: none;
+			background: #3a3a3a;
+		}
 	}
 </style>

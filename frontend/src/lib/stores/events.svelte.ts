@@ -20,7 +20,7 @@ class EventsStore {
 				fetchSessionStats(sessionId),
 				fetchSessionTree(sessionId)
 			]);
-			this.events = events;
+			this.events = events.map(e => ({ ...e, isNew: false }));
 			this.stats = stats;
 			this.tree = tree;
 			this.eventIds = new Set(events.map(e => e.id));
@@ -34,7 +34,7 @@ class EventsStore {
 	appendEvent(event: Event): void {
 		if (this.eventIds.has(event.id)) return;
 		this.eventIds.add(event.id);
-		this.events = [...this.events, event];
+		this.events = [...this.events, { ...event, isNew: true }];
 	}
 }
 

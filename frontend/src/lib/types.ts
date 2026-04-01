@@ -7,6 +7,7 @@ export interface Event {
 	timestamp: string;
 	parentId: string | null;
 	tool_name?: string | null;
+	isNew?: boolean;
 }
 
 export interface SessionSummary {
