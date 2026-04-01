@@ -3,7 +3,7 @@
 	import { formatTimestamp, formatEventDescription, getEventColor, getEventBgColor, getEventCategory, colorizeJson } from '$lib/utils/events';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 
-	let { event }: { event: Event } = $props();
+	let { event, onexpand }: { event: Event; onexpand?: () => void } = $props();
 
 	let expanded = $state(false);
 
@@ -25,6 +25,7 @@
 	let translating = $state(false);
 	let translateError = $state('');
 	let showingOriginal = $state(false);
+	let translateCost = $state<number | null>(null);
 
 	function toggleJson(e: MouseEvent) {
 		e.stopPropagation();
@@ -121,6 +122,7 @@
 
 	function toggle() {
 		expanded = !expanded;
+		if (expanded && onexpand) onexpand();
 	}
 
 	async function handleTranslate(e: MouseEvent) {
@@ -149,6 +151,7 @@
 			}
 			const data = await resp.json();
 			translatedText = data.translation || '';
+			translateCost = data.cost_rub ?? null;
 		} catch (err) {
 			translateError = err instanceof Error ? err.message : String(err);
 		} finally {
@@ -205,6 +208,9 @@
 					<div class="reasoning-label">{expandableLabel}</div>
 					<div class="reasoning-actions">
 						{#if translatedText}
+							{#if translateCost !== null}
+								<span class="translate-cost">{translateCost.toFixed(2)} ₽</span>
+							{/if}
 							<button
 								class="translate-toggle"
 								onclick={(e) => { e.stopPropagation(); showingOriginal = !showingOriginal; }}
@@ -544,6 +550,16 @@
 	.translate-toggle:hover {
 		background: rgba(255, 255, 255, 0.1);
 		color: var(--text-primary);
+	}
+
+	.translate-cost {
+		font-size: 9px;
+		color: var(--text-secondary);
+		background: rgba(255, 255, 255, 0.05);
+		padding: 2px 6px;
+		border-radius: 8px;
+		font-family: var(--font-mono);
+		align-self: center;
 	}
 
 	.translate-error {

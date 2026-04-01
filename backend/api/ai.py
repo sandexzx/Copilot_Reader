@@ -71,7 +71,14 @@ async def translate(req: TranslateRequest):
             resp.raise_for_status()
             data = resp.json()
             content = data["choices"][0]["message"]["content"]
-            return {"translation": content}
+            usage = data.get("usage", {})
+            return {
+                "translation": content,
+                "cost_rub": usage.get("cost_rub"),
+                "balance": usage.get("balance"),
+                "prompt_tokens": usage.get("prompt_tokens"),
+                "completion_tokens": usage.get("completion_tokens"),
+            }
         except httpx.HTTPStatusError as e:
             detail = e.response.text[:300] if e.response else str(e)
             raise HTTPException(e.response.status_code, f"AITunnel error: {detail}") from e

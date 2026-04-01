@@ -34,6 +34,10 @@
     hasNewEvents = false;
   }
 
+  function pauseAutoScroll() {
+    autoScroll = false;
+  }
+
   $effect(() => {
     const count = visibleEvents.length;
     const firstId = visibleEvents.length > 0 ? visibleEvents[0].id : null;
@@ -79,7 +83,7 @@
       </div>
     {:else}
       {#each visibleEvents as event (event.id)}
-        <EventRow {event} />
+        <EventRow {event} onexpand={pauseAutoScroll} />
       {/each}
     {/if}
   </div>
