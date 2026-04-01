@@ -14,6 +14,16 @@
 	let isSubagent = $derived(event.type.startsWith('subagent.'));
 	let detailHtml = $derived(colorizeJson(event.data));
 	let model = $derived((event.data?.model ?? event.data?.currentModel ?? '') as string);
+	let reasoningText = $derived((event.data?.reasoningText ?? '') as string);
+	let summaryContent = $derived((event.data?.summaryContent ?? '') as string);
+	let expandableText = $derived(reasoningText || summaryContent);
+	let expandableLabel = $derived(reasoningText ? '🧠 Reasoning' : '📋 Compaction Summary');
+	let jsonCollapsed = $state(true);
+
+	function toggleJson(e: MouseEvent) {
+		e.stopPropagation();
+		jsonCollapsed = !jsonCollapsed;
+	}
 
 	let fileChip = $derived.by(() => {
 		const d = event.data;
@@ -143,12 +153,28 @@
 			<span class="result-chip" title={resultChip}>{successIndicator} {resultChip}</span>
 		{/if}
 		<span class="event-desc">{description}</span>
+		{#if expandableText}
+			<span class="reasoning-indicator" title={reasoningText ? 'Есть размышления (reasoning)' : 'Есть summary контекста'}>{reasoningText ? '🧠' : '📋'}</span>
+		{/if}
 		<span class="freshness-dot" class:is-new={event.isNew}></span>
 		<span class="event-expand">{expanded ? '▾' : '▸'}</span>
 	</div>
 	{#if expanded}
+		{#if expandableText}
+			<div class="reasoning-block">
+				<div class="reasoning-label">{expandableLabel}</div>
+				<div class="reasoning-text">{expandableText}</div>
+			</div>
+		{/if}
 		<div class="event-detail">
-			<pre>{@html detailHtml}</pre>
+			{#if expandableText}
+				<button class="json-toggle" onclick={toggleJson}>
+					{jsonCollapsed ? '▸' : '▾'} Raw JSON
+				</button>
+			{/if}
+			{#if !expandableText || !jsonCollapsed}
+				<pre>{@html detailHtml}</pre>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -360,6 +386,61 @@
 		overflow-x: auto;
 		background: rgba(0, 0, 0, 0.15);
 		border-bottom: 1px solid rgba(60, 60, 60, 0.3);
+	}
+
+	.reasoning-block {
+		padding: 8px 12px 8px 112px;
+		background: rgba(197, 134, 192, 0.06);
+		border-left: 3px solid rgba(197, 134, 192, 0.4);
+		border-bottom: 1px solid rgba(60, 60, 60, 0.2);
+	}
+
+	.reasoning-label {
+		font-size: 10px;
+		font-weight: 600;
+		color: var(--color-assistant, #c586c0);
+		margin-bottom: 4px;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	.reasoning-text {
+		font-size: 12px;
+		color: var(--text-primary);
+		line-height: 1.6;
+		white-space: pre-wrap;
+		word-break: break-word;
+		max-height: 300px;
+		overflow-y: auto;
+	}
+
+	.json-toggle {
+		background: none;
+		border: none;
+		color: var(--text-secondary);
+		font-family: var(--font-mono);
+		font-size: 10px;
+		cursor: pointer;
+		padding: 2px 0;
+		margin-bottom: 4px;
+		opacity: 0.7;
+		transition: opacity 0.15s;
+	}
+
+	.json-toggle:hover {
+		opacity: 1;
+	}
+
+	.reasoning-indicator {
+		flex-shrink: 0;
+		font-size: 12px;
+		cursor: pointer;
+		filter: grayscale(0.3);
+		transition: filter 0.15s;
+	}
+
+	.reasoning-indicator:hover {
+		filter: none;
 	}
 
 	.event-detail pre {

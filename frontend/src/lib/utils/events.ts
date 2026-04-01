@@ -69,17 +69,35 @@ export function formatEventDescription(event: Event): string {
 			if (pr) parts.push(`, ${pr} premium requests`);
 			return parts.join('');
 		}
+		case 'session.compaction_complete': {
+			const summary = str(d.summaryContent ?? '');
+			const tokens = d.compactionTokensUsed ?? d.preCompactionTokens;
+			const parts: string[] = ['Context compacted'];
+			if (tokens != null) parts.push(`(${tokens} tokens)`);
+			if (summary) parts.push(`— ${truncate(summary.replace(/\n/g, ' '), 80)}`);
+			return parts.join(' ');
+		}
 		case 'user.message': {
 			const content = str(d.content ?? d.message ?? d.text ?? '');
 			return content ? truncate(content, 100) : 'User message';
 		}
 		case 'assistant.message': {
-			const toolCalls = d.tool_calls ?? d.toolCalls;
+			const toolCalls = d.tool_calls ?? d.toolCalls ?? d.toolRequests;
 			if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+				const names = toolCalls
+					.map((t: Record<string, unknown>) => str(t.name ?? ''))
+					.filter(Boolean);
+				if (names.length > 0) {
+					const unique = [...new Set(names)];
+					return truncate(unique.join(', '), 100);
+				}
 				return `${toolCalls.length} tool call${toolCalls.length === 1 ? '' : 's'}`;
 			}
 			const content = str(d.content ?? d.message ?? d.text ?? '');
-			return content ? truncate(content, 100) : 'Assistant response';
+			if (content) return truncate(content, 100);
+			const reasoning = str(d.reasoningText ?? '');
+			if (reasoning) return truncate(reasoning, 100);
+			return 'Assistant response';
 		}
 		case 'tool.execution_start': {
 			const name = str(d.toolName ?? d.tool_name ?? d.name ?? '');
@@ -137,6 +155,10 @@ export function formatEventDescription(event: Event): string {
 				if (desc) parts.push(`"${truncate(desc, 40)}"`);
 				if (mode) parts.push(`[${mode}]`);
 				return parts.join(' ');
+			}
+			if (name === 'report_intent' && args) {
+				const intent = str(args.intent ?? '');
+				if (intent) return `🎯 ${truncate(intent, 80)}`;
 			}
 			const desc = str(d.description ?? d.input ?? '');
 			if (name && desc) return `${name} → ${truncate(desc, 80)}`;
