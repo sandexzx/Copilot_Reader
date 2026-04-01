@@ -4,6 +4,7 @@
   import EventPanel from '$lib/components/EventPanel.svelte';
   import ResizeHandle from '$lib/components/ResizeHandle.svelte';
   import DetailPanel from '$lib/components/DetailPanel.svelte';
+  import SettingsModal from '$lib/components/SettingsModal.svelte';
   import { sessionsStore } from '$lib/stores/sessions.svelte';
   import { eventsStore } from '$lib/stores/events.svelte';
   import { websocketStore } from '$lib/stores/websocket.svelte';
@@ -93,6 +94,8 @@
     </div>
   </div>
 </main>
+
+<SettingsModal />
 
 <style>
   .main {

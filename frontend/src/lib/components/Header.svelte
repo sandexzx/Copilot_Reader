@@ -1,5 +1,11 @@
 <script lang="ts">
+  import { settingsStore } from '$lib/stores/settings.svelte';
+
   let { sessionId = '', isConnected = false, isActive = false } = $props();
+
+  function openSettings() {
+    settingsStore.showSettings = true;
+  }
 </script>
 
 <header class="header">
@@ -21,6 +27,9 @@
     {/if}
   {/if}
   <div class="header-spacer"></div>
+  <button class="settings-btn" onclick={openSettings} title="Настройки AI перевода" class:configured={settingsStore.isConfigured}>
+    ⚙️
+  </button>
   <input class="search-bar" type="text" placeholder="Search events… (⌘K)">
 </header>
 
@@ -131,5 +140,27 @@
 
   .search-bar::placeholder {
     color: var(--text-secondary);
+  }
+
+  .settings-btn {
+    background: none;
+    border: 1px solid transparent;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background 0.15s, border-color 0.15s;
+    filter: grayscale(0.5);
+    line-height: 1;
+  }
+
+  .settings-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    filter: none;
+  }
+
+  .settings-btn.configured {
+    filter: none;
+    border-color: rgba(78, 201, 176, 0.3);
   }
 </style>

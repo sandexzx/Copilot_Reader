@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .api.sessions import router as sessions_router
 from .api.websocket import router as websocket_router, shutdown_watcher_manager
+from .api.ai import router as ai_router
 
 
 @asynccontextmanager
@@ -32,6 +33,7 @@ app.add_middleware(
 # --- API and WebSocket routes (registered BEFORE static mount so they take priority) ---
 app.include_router(sessions_router)
 app.include_router(websocket_router)
+app.include_router(ai_router)
 
 
 @app.get("/api/health")

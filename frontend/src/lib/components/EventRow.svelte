@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Event } from '$lib/types';
 	import { formatTimestamp, formatEventDescription, getEventColor, getEventBgColor, getEventCategory, colorizeJson } from '$lib/utils/events';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 
 	let { event }: { event: Event } = $props();
 
@@ -19,6 +20,11 @@
 	let expandableText = $derived(reasoningText || summaryContent);
 	let expandableLabel = $derived(reasoningText ? '🧠 Reasoning' : '📋 Compaction Summary');
 	let jsonCollapsed = $state(true);
+
+	let translatedText = $state('');
+	let translating = $state(false);
+	let translateError = $state('');
+	let showingOriginal = $state(false);
 
 	function toggleJson(e: MouseEvent) {
 		e.stopPropagation();
@@ -116,6 +122,39 @@
 	function toggle() {
 		expanded = !expanded;
 	}
+
+	async function handleTranslate(e: MouseEvent) {
+		e.stopPropagation();
+		if (!settingsStore.isConfigured) {
+			settingsStore.showSettings = true;
+			return;
+		}
+		if (translating || translatedText) return;
+
+		translating = true;
+		translateError = '';
+		try {
+			const resp = await fetch('/api/ai/translate', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					text: expandableText,
+					api_key: settingsStore.apiKey,
+					model: settingsStore.model,
+				}),
+			});
+			if (!resp.ok) {
+				const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+				throw new Error(err.detail || `HTTP ${resp.status}`);
+			}
+			const data = await resp.json();
+			translatedText = data.translation || '';
+		} catch (err) {
+			translateError = err instanceof Error ? err.message : String(err);
+		} finally {
+			translating = false;
+		}
+	}
 </script>
 
 <div class="event-row-wrapper">
@@ -162,8 +201,38 @@
 	{#if expanded}
 		{#if expandableText}
 			<div class="reasoning-block">
-				<div class="reasoning-label">{expandableLabel}</div>
-				<div class="reasoning-text">{expandableText}</div>
+				<div class="reasoning-header">
+					<div class="reasoning-label">{expandableLabel}</div>
+					<div class="reasoning-actions">
+						{#if translatedText}
+							<button
+								class="translate-toggle"
+								onclick={(e) => { e.stopPropagation(); showingOriginal = !showingOriginal; }}
+							>
+								{showingOriginal ? '🇷🇺 Показать перевод' : '🇬🇧 Показать оригинал'}
+							</button>
+						{:else}
+							<button
+								class="translate-action"
+								onclick={handleTranslate}
+								disabled={translating}
+								title={settingsStore.isConfigured ? 'Перевести на русский' : 'Настройте API ключ'}
+							>
+								{#if translating}
+									<span class="translate-spinner"></span>
+									Перевожу…
+								{:else}
+									<span class="translate-icon">🌐</span>
+									Перевести
+								{/if}
+							</button>
+						{/if}
+					</div>
+				</div>
+				{#if translateError}
+					<div class="translate-error">⚠ {translateError}</div>
+				{/if}
+				<div class="reasoning-text">{translatedText && !showingOriginal ? translatedText : expandableText}</div>
 			</div>
 		{/if}
 		<div class="event-detail">
@@ -395,13 +464,92 @@
 		border-bottom: 1px solid rgba(60, 60, 60, 0.2);
 	}
 
+	.reasoning-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 4px;
+	}
+
 	.reasoning-label {
 		font-size: 10px;
 		font-weight: 600;
 		color: var(--color-assistant, #c586c0);
-		margin-bottom: 4px;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
+	}
+
+	.reasoning-actions {
+		display: flex;
+		gap: 6px;
+	}
+
+	.translate-action {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		background: linear-gradient(135deg, rgba(78, 201, 176, 0.15), rgba(156, 220, 254, 0.15));
+		border: 1px solid rgba(78, 201, 176, 0.3);
+		color: var(--cyan, #9cdcfe);
+		font-size: 10px;
+		font-weight: 500;
+		cursor: pointer;
+		padding: 3px 10px;
+		border-radius: 12px;
+		transition: all 0.2s;
+	}
+
+	.translate-action:hover:not(:disabled) {
+		background: linear-gradient(135deg, rgba(78, 201, 176, 0.25), rgba(156, 220, 254, 0.25));
+		border-color: rgba(78, 201, 176, 0.5);
+		box-shadow: 0 0 8px rgba(78, 201, 176, 0.2);
+	}
+
+	.translate-action:disabled {
+		opacity: 0.7;
+		cursor: default;
+	}
+
+	.translate-icon {
+		font-size: 12px;
+	}
+
+	.translate-spinner {
+		width: 10px;
+		height: 10px;
+		border: 1.5px solid rgba(156, 220, 254, 0.3);
+		border-top-color: var(--cyan, #9cdcfe);
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
+	}
+
+	.translate-toggle {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		color: var(--text-secondary);
+		font-size: 10px;
+		cursor: pointer;
+		padding: 3px 10px;
+		border-radius: 12px;
+		transition: all 0.15s;
+	}
+
+	.translate-toggle:hover {
+		background: rgba(255, 255, 255, 0.1);
+		color: var(--text-primary);
+	}
+
+	.translate-error {
+		font-size: 11px;
+		color: #f44747;
+		margin-top: 4px;
 	}
 
 	.reasoning-text {
