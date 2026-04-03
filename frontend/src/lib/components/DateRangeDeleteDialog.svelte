@@ -1,36 +1,95 @@
 <script lang="ts">
 	import { sessionsStore } from '$lib/stores/sessions.svelte';
+	import { deleteSessions } from '$lib/api';
 
 	let { onclose }: { onclose: () => void } = $props();
 
-	let dateFrom = $state('');
-	let dateTo = $state('');
 	let isSubmitting = $state(false);
+	let selectedDates = $state<Set<string>>(new Set());
 
-	let validRange = $derived(dateFrom !== '' && dateTo !== '' && dateFrom <= dateTo);
+	interface DateGroup {
+		date: string;
+		dateLabel: string;
+		total: number;
+		inactive: number;
+		active: number;
+	}
 
-	let sessionsInRange = $derived.by(() => {
-		if (!dateFrom || !dateTo) return [];
-		const from = new Date(dateFrom);
-		const to = new Date(dateTo);
-		to.setHours(23, 59, 59, 999);
-		return sessionsStore.sessions.filter(s => {
-			if (s.is_active) return false;
-			const updated = new Date(s.updated_at);
-			return updated >= from && updated <= to;
-		});
+	let dateGroups: DateGroup[] = $derived.by(() => {
+		const groups = new Map<string, { total: number; inactive: number; active: number }>();
+
+		for (const s of sessionsStore.sessions) {
+			const dateKey = s.updated_at.slice(0, 10);
+			const existing = groups.get(dateKey) || { total: 0, inactive: 0, active: 0 };
+			existing.total++;
+			if (s.is_active) {
+				existing.active++;
+			} else {
+				existing.inactive++;
+			}
+			groups.set(dateKey, existing);
+		}
+
+		return Array.from(groups.entries())
+			.sort((a, b) => b[0].localeCompare(a[0]))
+			.map(([date, counts]) => ({
+				date,
+				dateLabel: formatDate(date),
+				...counts,
+			}));
 	});
 
-	let validationError = $derived.by(() => {
-		if (dateFrom && dateTo && dateFrom > dateTo) return 'Дата «От» не может быть позже даты «До»';
-		return '';
+	function formatDate(dateStr: string): string {
+		const d = new Date(dateStr + 'T00:00:00');
+		return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+	}
+
+	function toggleDate(date: string) {
+		const next = new Set(selectedDates);
+		if (next.has(date)) {
+			next.delete(date);
+		} else {
+			next.add(date);
+		}
+		selectedDates = next;
+	}
+
+	function selectAll() {
+		selectedDates = new Set(dateGroups.filter(g => g.inactive > 0).map(g => g.date));
+	}
+
+	function clearAll() {
+		selectedDates = new Set();
+	}
+
+	let totalToDelete = $derived.by(() => {
+		let count = 0;
+		for (const group of dateGroups) {
+			if (selectedDates.has(group.date)) {
+				count += group.inactive;
+			}
+		}
+		return count;
 	});
 
 	async function handleConfirm() {
-		if (!validRange || sessionsInRange.length === 0) return;
+		if (totalToDelete === 0) return;
 		isSubmitting = true;
 		try {
-			await sessionsStore.deleteByDateRange(dateFrom, dateTo);
+			const idsToDelete = sessionsStore.sessions
+				.filter(s => {
+					if (s.is_active) return false;
+					const dateKey = s.updated_at.slice(0, 10);
+					return selectedDates.has(dateKey);
+				})
+				.map(s => s.id);
+
+			const result = await deleteSessions(idsToDelete);
+			sessionsStore.lastDeleteResult = result;
+			if (sessionsStore.selectedSessionId && result.deleted.includes(sessionsStore.selectedSessionId)) {
+				sessionsStore.selectedSessionId = null;
+			}
+			await sessionsStore.loadSessions();
 			onclose();
 		} finally {
 			isSubmitting = false;
@@ -55,38 +114,37 @@
 		</div>
 
 		<div class="modal-body">
-			<div class="date-fields">
-				<label class="field">
-					<span class="field-label">От</span>
-					<input
-						type="date"
-						class="field-input"
-						bind:value={dateFrom}
-					/>
-				</label>
-				<label class="field">
-					<span class="field-label">До</span>
-					<input
-						type="date"
-						class="field-input"
-						bind:value={dateTo}
-					/>
-				</label>
-			</div>
+			{#if dateGroups.length === 0}
+				<div class="empty-state">Нет сессий для отображения</div>
+			{:else}
+				<div class="date-actions">
+					<button class="link-btn" onclick={selectAll}>Выбрать все</button>
+					<button class="link-btn" onclick={clearAll}>Сбросить</button>
+				</div>
 
-			{#if validationError}
-				<div class="validation-error">{validationError}</div>
+				<div class="date-list">
+					{#each dateGroups as group (group.date)}
+						<label class="date-row" class:disabled={group.inactive === 0}>
+							<input
+								type="checkbox"
+								checked={selectedDates.has(group.date)}
+								disabled={group.inactive === 0}
+								onchange={() => toggleDate(group.date)}
+							/>
+							<div class="date-info">
+								<span class="date-label">{group.dateLabel}</span>
+								<span class="date-count">
+									{group.inactive} к удалению{#if group.active > 0}<span class="active-note">, {group.active} активн.</span>{/if}
+								</span>
+							</div>
+						</label>
+					{/each}
+				</div>
 			{/if}
 
-			{#if validRange}
+			{#if totalToDelete > 0}
 				<div class="preview">
-					{#if sessionsInRange.length === 0}
-						<span class="preview-empty">Нет неактивных сессий в выбранном диапазоне</span>
-					{:else}
-						<span class="preview-count">
-							Будет удалено: <strong>{sessionsInRange.length}</strong> неактивных сессий
-						</span>
-					{/if}
+					Будет удалено: <strong>{totalToDelete}</strong> неактивных сессий
 				</div>
 			{/if}
 		</div>
@@ -96,7 +154,7 @@
 			<button
 				class="btn btn-danger"
 				onclick={handleConfirm}
-				disabled={!validRange || sessionsInRange.length === 0 || isSubmitting}
+				disabled={totalToDelete === 0 || isSubmitting}
 			>
 				{#if isSubmitting}
 					<span class="spinner"></span>
@@ -166,44 +224,90 @@
 		gap: 12px;
 	}
 
-	.date-fields {
+	.date-actions {
 		display: flex;
 		gap: 12px;
+		padding-bottom: 8px;
+		border-bottom: 1px solid var(--border);
 	}
 
-	.field {
+	.link-btn {
+		background: none;
+		border: none;
+		color: var(--border-active);
+		font-size: 11px;
+		cursor: pointer;
+		padding: 0;
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+
+	.link-btn:hover {
+		color: var(--text-primary);
+	}
+
+	.date-list {
+		max-height: 320px;
+		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		flex: 1;
+		gap: 2px;
 	}
 
-	.field-label {
+	.date-row {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 6px 8px;
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+
+	.date-row:hover:not(.disabled) {
+		background: var(--bg-hover);
+	}
+
+	.date-row.disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.date-row input[type="checkbox"] {
+		width: 14px;
+		height: 14px;
+		accent-color: var(--border-active);
+		cursor: inherit;
+		flex-shrink: 0;
+	}
+
+	.date-info {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		min-width: 0;
+	}
+
+	.date-label {
 		font-size: 12px;
+		color: var(--text-primary);
 		font-weight: 500;
+	}
+
+	.date-count {
+		font-size: 10px;
 		color: var(--text-secondary);
 	}
 
-	.field-input {
-		height: 32px;
-		background: var(--bg-input);
-		border: 1px solid var(--border);
-		border-radius: 4px;
-		padding: 0 10px;
-		color: var(--text-primary);
+	.active-note {
+		color: var(--green-bright);
+	}
+
+	.empty-state {
+		text-align: center;
+		padding: 20px;
 		font-size: 12px;
-		font-family: var(--font-sans);
-		outline: none;
-		color-scheme: dark;
-	}
-
-	.field-input:focus {
-		border-color: var(--border-active);
-	}
-
-	.validation-error {
-		font-size: 11px;
-		color: var(--red);
+		color: var(--text-secondary);
 	}
 
 	.preview {
@@ -211,19 +315,11 @@
 		border-radius: var(--radius-sm);
 		background: rgba(255, 255, 255, 0.04);
 		border: 1px solid var(--border);
-	}
-
-	.preview-empty {
-		font-size: 11px;
-		color: var(--text-secondary);
-	}
-
-	.preview-count {
 		font-size: 11px;
 		color: var(--text-primary);
 	}
 
-	.preview-count strong {
+	.preview strong {
 		color: var(--red);
 	}
 
