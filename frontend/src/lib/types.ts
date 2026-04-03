@@ -82,3 +82,19 @@ export interface DailyUsageResponse {
 	models: Record<string, ModelUsage>;
 	totals: DailyUsageTotals;
 }
+
+export interface DeleteRequest {
+	session_ids: string[];
+}
+
+export interface DateRangeDeleteRequest {
+	date_from: string; // "YYYY-MM-DD"
+	date_to: string; // "YYYY-MM-DD"
+}
+
+export interface DeleteResult {
+	deleted: string[];
+	skipped_active: string[];
+	not_found: string[];
+	errors: Record<string, string>;
+}

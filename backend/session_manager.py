@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+import shutil
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -169,6 +170,77 @@ def discover_sessions() -> list[SessionSummary]:
         reverse=True,
     )
     return active + inactive
+
+
+def delete_session(session_id: str) -> str:
+    """Delete a single session directory.
+
+    Returns: "deleted", "active", "not_found", or error message starting with "error:".
+    """
+    from .security import safe_session_dir
+
+    try:
+        session_dir = safe_session_dir(session_id)
+    except Exception:
+        return "not_found"
+
+    if not session_dir.is_dir():
+        return "not_found"
+
+    active, _pid = is_session_active(session_dir)
+    if active:
+        return "active"
+
+    try:
+        shutil.rmtree(session_dir)
+        return "deleted"
+    except Exception as e:
+        return f"error:{e}"
+
+
+def delete_sessions_by_date_range(
+    date_from: date, date_to: date
+) -> tuple[list[str], list[str], dict[str, str]]:
+    """Find and delete all inactive sessions within date range (inclusive).
+
+    Filters by updated_at. Returns (deleted_ids, skipped_active_ids, errors_dict).
+    """
+    state_dir = _get_session_state_dir()
+    deleted: list[str] = []
+    skipped_active: list[str] = []
+    errors: dict[str, str] = {}
+
+    if not state_dir.is_dir():
+        return deleted, skipped_active, errors
+
+    for entry in state_dir.iterdir():
+        if entry.is_symlink() or not entry.is_dir():
+            continue
+
+        session_id = entry.name
+        meta = get_session_metadata(entry)
+        updated_at = meta["updated_at"]
+
+        if isinstance(updated_at, datetime):
+            updated_date = updated_at.date()
+        else:
+            continue
+
+        if not (date_from <= updated_date <= date_to):
+            continue
+
+        active, _pid = is_session_active(entry)
+        if active:
+            skipped_active.append(session_id)
+            continue
+
+        try:
+            shutil.rmtree(entry)
+            deleted.append(session_id)
+        except Exception as e:
+            errors[session_id] = str(e)
+
+    return deleted, skipped_active, errors
 
 
 def get_session(session_id: str) -> Session:

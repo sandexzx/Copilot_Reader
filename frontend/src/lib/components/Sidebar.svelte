@@ -1,6 +1,9 @@
 <script lang="ts">
   import SessionCard from './SessionCard.svelte';
   import DailyUsage from './DailyUsage.svelte';
+  import DeleteToolbar from './DeleteToolbar.svelte';
+  import ConfirmDialog from './ConfirmDialog.svelte';
+  import DateRangeDeleteDialog from './DateRangeDeleteDialog.svelte';
   import { sessionsStore } from '$lib/stores/sessions.svelte';
   import type { SessionSummary } from '$lib/types';
 
@@ -9,6 +12,8 @@
   let searchInput = $state('');
   let searchQuery = $state('');
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let showConfirmDialog = $state(false);
+  let showDateRangeDialog = $state(false);
 
   function handleSearchInput(e: Event) {
     const value = (e.target as HTMLInputElement).value;
@@ -48,10 +53,18 @@
       <circle cx="15" cy="10" r="1.5" fill="#4ec9b0"/>
       <path d="M8.5 14.5c0 0 1.5 2 3.5 2s3.5-2 3.5-2" stroke="#4ec9b0" stroke-width="1.2" stroke-linecap="round" fill="none"/>
     </svg>
-    <div>
+    <div class="sidebar-title-group">
       <div class="sidebar-title">Copilot Reader</div>
       <div class="sidebar-subtitle">Session Explorer</div>
     </div>
+    <button
+      class="manage-btn"
+      class:active={sessionsStore.manageMode}
+      onclick={() => sessionsStore.toggleManageMode()}
+      title={sessionsStore.manageMode ? 'Выйти из режима управления' : 'Управление сессиями'}
+    >
+      {sessionsStore.manageMode ? '✕' : '✎'}
+    </button>
   </div>
 
   <div class="search-wrapper">
@@ -91,6 +104,7 @@
           <SessionCard
             {session}
             selected={sessionsStore.selectedSessionId === session.id}
+            manageMode={sessionsStore.manageMode}
             onselect={handleSelect}
           />
         {/each}
@@ -102,13 +116,35 @@
           <SessionCard
             {session}
             selected={sessionsStore.selectedSessionId === session.id}
+            manageMode={sessionsStore.manageMode}
             onselect={handleSelect}
           />
         {/each}
       {/if}
     {/if}
   </div>
+
+  {#if sessionsStore.manageMode}
+    <DeleteToolbar
+      onconfirmdelete={() => showConfirmDialog = true}
+      ondaterange={() => showDateRangeDialog = true}
+    />
+  {/if}
 </aside>
+
+{#if showConfirmDialog}
+  <ConfirmDialog
+    title="Удаление сессий"
+    message={`Удалить ${sessionsStore.selectedCount} выбранных сессий? Это действие необратимо.`}
+    confirmLabel="Удалить"
+    onconfirm={() => { showConfirmDialog = false; sessionsStore.deleteSelected(); }}
+    oncancel={() => showConfirmDialog = false}
+  />
+{/if}
+
+{#if showDateRangeDialog}
+  <DateRangeDeleteDialog onclose={() => showDateRangeDialog = false} />
+{/if}
 
 <style>
   .sidebar {
@@ -133,6 +169,11 @@
     flex-shrink: 0;
   }
 
+  .sidebar-title-group {
+    flex: 1;
+    min-width: 0;
+  }
+
   .sidebar-title {
     font-size: 13px;
     font-weight: 600;
@@ -144,6 +185,30 @@
     font-size: 10px;
     color: var(--text-secondary);
     margin-top: 1px;
+  }
+
+  .manage-btn {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .manage-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .manage-btn.active {
+    color: var(--red);
+    border-color: rgba(244, 71, 71, 0.3);
+    background: rgba(244, 71, 71, 0.1);
   }
 
   .search-wrapper {

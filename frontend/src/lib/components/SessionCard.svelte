@@ -1,10 +1,12 @@
 <script lang="ts">
 	import type { SessionSummary } from '$lib/types';
+	import { sessionsStore } from '$lib/stores/sessions.svelte';
 	import { relativeTime, shortenPath } from '$lib/utils/time';
 
-	let { session, selected = false, onselect }: {
+	let { session, selected = false, manageMode = false, onselect }: {
 		session: SessionSummary;
 		selected?: boolean;
+		manageMode?: boolean;
 		onselect: (id: string) => void;
 	} = $props();
 
@@ -19,6 +21,15 @@
 	onclick={() => onselect(session.id)}
 	type="button"
 >
+	{#if manageMode}
+		<div class="card-checkbox" onclick={(e) => e.stopPropagation()}>
+			<input type="checkbox"
+				checked={sessionsStore.isSelectedForDeletion(session.id)}
+				disabled={session.is_active}
+				onchange={() => sessionsStore.toggleDeleteSelection(session.id)}
+			/>
+		</div>
+	{/if}
 	<div class="card-accent" class:accent-live={session.is_active}></div>
 	<div class="card-body">
 		<div class="card-top">
@@ -72,6 +83,25 @@
 	.session-card.selected:hover {
 		background: rgba(9, 71, 113, 0.55);
 		box-shadow: inset 0 0 0 1px rgba(0, 122, 204, 0.25);
+	}
+
+	.card-checkbox {
+		display: flex;
+		align-items: center;
+		padding: 0 2px 0 8px;
+		flex-shrink: 0;
+	}
+
+	.card-checkbox input[type="checkbox"] {
+		width: 14px;
+		height: 14px;
+		accent-color: var(--border-active);
+		cursor: pointer;
+	}
+
+	.card-checkbox input[type="checkbox"]:disabled {
+		opacity: 0.3;
+		cursor: not-allowed;
 	}
 
 	.card-accent {

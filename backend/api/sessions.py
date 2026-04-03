@@ -15,6 +15,9 @@ from ..event_parser import (
 )
 from ..models import (
     DailyUsageResponse,
+    DateRangeDeleteRequest,
+    DeleteRequest,
+    DeleteResult,
     Event,
     Session,
     SessionStats,
@@ -22,7 +25,12 @@ from ..models import (
     TreeNode,
 )
 from ..security import safe_session_dir, validate_session_id
-from ..session_manager import discover_sessions, get_session
+from ..session_manager import (
+    delete_session,
+    delete_sessions_by_date_range,
+    discover_sessions,
+    get_session,
+)
 from ..usage_aggregator import get_daily_usage
 
 logger = logging.getLogger(__name__)
@@ -57,6 +65,69 @@ async def get_daily_usage_stats() -> DailyUsageResponse:
     except Exception as exc:
         logger.exception("Failed to compute daily usage stats")
         raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
+@router.delete("/by-date", response_model=DeleteResult)
+async def delete_sessions_by_date(body: DateRangeDeleteRequest) -> DeleteResult:
+    """Delete all inactive sessions within a date range (inclusive)."""
+    from datetime import date as date_type
+
+    try:
+        d_from = date_type.fromisoformat(body.date_from)
+        d_to = date_type.fromisoformat(body.date_to)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+
+    if d_from > d_to:
+        raise HTTPException(status_code=400, detail="date_from must be <= date_to")
+
+    try:
+        deleted, skipped_active, errors = delete_sessions_by_date_range(d_from, d_to)
+        return DeleteResult(
+            deleted=deleted,
+            skipped_active=skipped_active,
+            errors=errors,
+        )
+    except Exception as exc:
+        logger.exception("Failed to delete sessions by date range")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
+@router.delete("/{session_id}", response_model=DeleteResult)
+async def delete_single_session(session_id: str) -> DeleteResult:
+    """Delete a single session by ID."""
+    validate_session_id(session_id)
+    result = delete_session(session_id)
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="Session not found")
+    if result == "active":
+        raise HTTPException(status_code=409, detail="Session is active")
+    if result.startswith("error:"):
+        raise HTTPException(status_code=500, detail=result)
+    return DeleteResult(deleted=[session_id])
+
+
+@router.delete("", response_model=DeleteResult)
+async def delete_sessions_batch(body: DeleteRequest) -> DeleteResult:
+    """Batch delete sessions by IDs."""
+    delete_result = DeleteResult()
+    for sid in body.session_ids:
+        try:
+            validate_session_id(sid)
+        except HTTPException:
+            delete_result.not_found.append(sid)
+            continue
+
+        result = delete_session(sid)
+        if result == "deleted":
+            delete_result.deleted.append(sid)
+        elif result == "active":
+            delete_result.skipped_active.append(sid)
+        elif result == "not_found":
+            delete_result.not_found.append(sid)
+        else:
+            delete_result.errors[sid] = result
+    return delete_result
 
 
 @router.get("/{session_id}", response_model=Session)

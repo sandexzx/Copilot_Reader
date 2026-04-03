@@ -102,6 +102,28 @@ class DailyUsageResponse(BaseModel):
     totals: DailyUsageTotals = Field(default_factory=DailyUsageTotals)
 
 
+class DeleteRequest(BaseModel):
+    """Request body for batch session deletion."""
+
+    session_ids: list[str]
+
+
+class DateRangeDeleteRequest(BaseModel):
+    """Request body for date-range session deletion."""
+
+    date_from: str  # ISO date "YYYY-MM-DD"
+    date_to: str  # ISO date "YYYY-MM-DD"
+
+
+class DeleteResult(BaseModel):
+    """Result of a delete operation."""
+
+    deleted: list[str] = Field(default_factory=list)
+    skipped_active: list[str] = Field(default_factory=list)
+    not_found: list[str] = Field(default_factory=list)
+    errors: dict[str, str] = Field(default_factory=dict)
+
+
 class WebSocketMessage(BaseModel):
     """Messages sent over WebSocket."""
 
