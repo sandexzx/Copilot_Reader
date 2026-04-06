@@ -1,18 +1,16 @@
 <script lang="ts">
-  import { fetchDailyUsage } from '$lib/api';
-  import { eventsStore } from '$lib/stores/events.svelte';
-  import type { DailyUsageResponse } from '$lib/types';
+  import { dailyUsageStore } from '$lib/stores/dailyUsage.svelte';
 
-  let data = $state<DailyUsageResponse | null>(null);
   let expanded = $state(true);
-  let loading = $state(false);
-  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Pricing per 1M tokens (USD)
   const MODEL_PRICING: Record<string, { input: number; output: number }> = {
     'claude-opus-4.6': { input: 5, output: 25 },
   };
   const USD_TO_RUB = 81.25;
+
+  let data = $derived(dailyUsageStore.data);
+  let loading = $derived(dailyUsageStore.loading);
 
   function formatTokens(n: number): string {
     if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -43,33 +41,8 @@
     return n.toFixed(2);
   }
 
-  async function loadData() {
-    loading = true;
-    try {
-      data = await fetchDailyUsage();
-    } catch {
-      // Silently fail — don't break sidebar
-    } finally {
-      loading = false;
-    }
-  }
-
-  // Periodic polling
   $effect(() => {
-    loadData();
-    const interval = setInterval(loadData, 30_000);
-    return () => clearInterval(interval);
-  });
-
-  // Refresh on new WebSocket events (debounced 5s)
-  $effect(() => {
-    const _len = eventsStore.events.length;
-    if (_len === 0) return;
-    if (refreshTimer) clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(loadData, 5_000);
-    return () => {
-      if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
-    };
+    dailyUsageStore.init();
   });
 
   function toggle() {

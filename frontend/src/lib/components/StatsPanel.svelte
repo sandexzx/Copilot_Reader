@@ -2,6 +2,7 @@
   import StatCard from './StatCard.svelte';
   import { eventsStore } from '$lib/stores/events.svelte';
   import { sessionsStore } from '$lib/stores/sessions.svelte';
+  import { dailyUsageStore } from '$lib/stores/dailyUsage.svelte';
 
   let stats = $derived(eventsStore.stats);
   let loading = $derived(eventsStore.isLoading);
@@ -11,6 +12,13 @@
   );
 
   const TOKEN_HINT = 'Данные появятся после завершения сессии';
+  const OUTPUT_RATE_LIMIT = 320_000;
+
+  $effect(() => {
+    dailyUsageStore.init();
+  });
+
+  let dailyOutputTokens = $derived(dailyUsageStore.data?.totals?.output_tokens ?? 0);
 
   function formatDuration(seconds: number): string {
     if (seconds < 60) return `${Math.round(seconds)}s`;
@@ -29,19 +37,27 @@
     color: string;
   }
 
-  let bars = $derived.by((): BarItem[] => {
+  let nonOutputBars = $derived.by((): BarItem[] => {
     if (!stats) return [];
     return [
       { label: 'Input', amount: stats.input_tokens, color: 'var(--blue)' },
-      { label: 'Output', amount: stats.output_tokens, color: 'var(--purple)' },
       { label: 'Cache Read', amount: stats.cache_read_tokens, color: 'var(--green)' },
       { label: 'Cache Write', amount: stats.cache_write_tokens, color: 'var(--orange)' },
     ];
   });
 
   let maxTokens = $derived(
-    Math.max(...bars.map(b => b.amount), 1)
+    Math.max(...nonOutputBars.map(b => b.amount), 1)
   );
+
+  let sessionOutputPct = $derived(
+    Math.min(((stats?.output_tokens ?? 0) / OUTPUT_RATE_LIMIT) * 100, 100)
+  );
+  let dailyOutputPct = $derived(
+    Math.min((dailyOutputTokens / OUTPUT_RATE_LIMIT) * 100, 100)
+  );
+  let dailyOutputRatio = $derived(dailyOutputTokens / OUTPUT_RATE_LIMIT);
+  let outputWarning = $derived(dailyOutputRatio > 0.8);
 </script>
 
 {#if loading && !stats}
@@ -80,7 +96,7 @@
     <div class="chart-section">
       <div class="chart-title">Token Usage by Category</div>
       <div class="bar-chart">
-        {#each bars as bar}
+        {#each nonOutputBars as bar}
           <div class="bar-row">
             <span class="bar-label">{bar.label}</span>
             <div class="bar-track">
@@ -92,6 +108,29 @@
             <span class="bar-amount">{bar.amount.toLocaleString()}</span>
           </div>
         {/each}
+
+        <!-- Output bar: dual-layer -->
+        <div class="bar-row">
+          <span class="bar-label">Output</span>
+          <div class="bar-track" class:output-warning={outputWarning}>
+            <div
+              class="bar-fill bar-fill-daily"
+              style="width: {dailyOutputPct}%"
+            ></div>
+            <div
+              class="bar-fill bar-fill-session"
+              style="width: {sessionOutputPct}%"
+            ></div>
+          </div>
+          <span class="bar-amount">
+            {(stats?.output_tokens ?? 0).toLocaleString()} / {dailyOutputTokens.toLocaleString()}
+          </span>
+        </div>
+        <div class="output-legend">
+          <span class="legend-item"><span class="legend-dot session-dot"></span> Session</span>
+          <span class="legend-item"><span class="legend-dot daily-dot"></span> Today</span>
+          <span class="legend-pct">{Math.round(dailyOutputRatio * 100)}% of 320K limit</span>
+        </div>
       </div>
     </div>
 {/if}
@@ -167,9 +206,10 @@
   .bar-amount {
     font-size: 10px;
     color: var(--text-secondary);
-    width: 70px;
+    min-width: 70px;
     font-family: var(--font-mono);
     flex-shrink: 0;
+    white-space: nowrap;
   }
 
   /* Skeleton loading */
@@ -236,5 +276,69 @@
     .bar-fill {
       transition-duration: 0.01ms;
     }
+  }
+
+  /* Output bar dual-fill */
+  .bar-fill-daily {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: rgba(197, 134, 192, 0.25);
+    z-index: 1;
+    border-radius: 3px;
+  }
+
+  .bar-fill-session {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: var(--purple);
+    z-index: 2;
+    border-radius: 3px;
+  }
+
+  .bar-track.output-warning {
+    border-color: var(--orange);
+  }
+
+  .output-legend {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-left: 110px;
+    margin-top: 2px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+  }
+
+  .legend-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+
+  .session-dot {
+    background: var(--purple);
+  }
+
+  .daily-dot {
+    background: rgba(197, 134, 192, 0.45);
+  }
+
+  .legend-pct {
+    font-size: 9px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    margin-left: auto;
   }
 </style>
