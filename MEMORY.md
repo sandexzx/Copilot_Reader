@@ -115,5 +115,15 @@
 ## 💡 Решения и заметки
 - MEMORY.md обновляется по мере хода разработки
 - При крэше контекста — начинай с чтения этого файла
+- Rate limit 320K output tokens/day — константа захардкожена во фронтенде (`OUTPUT_RATE_LIMIT`), не приходит с бэкенда
+- `dailyUsageStore` — singleton, polling каждые 30с + debounced 5с после WS-событий. Init идемпотентен.
+- Процент rate limit теперь отображается в 3 местах: Header (badge), Sidebar DailyUsage (прогресс-бар), StatsPanel (Output bar + legend)
 
 Закрыл 11 и 12 задачки.
+
+## 📝 Session Log
+
+### 2026-04-08
+- Добавлен rate limit индикатор в Header (pill-badge с прогресс-баром, цветовая кодировка по порогам)
+- Добавлен rate limit прогресс-бар в DailyUsage sidebar (полноширинная полоса с пульсирующим свечением при >80%)
+- Коммит: `feat: add prominent rate limit indicators to header and sidebar`
