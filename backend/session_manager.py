@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from datetime import date, datetime, timezone
@@ -9,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from .models import Session, SessionSummary
+from .models import CopilotUserInfo, Session, SessionSummary
 
 _DEFAULT_SESSION_STATE_DIR = "~/.copilot/session-state"
 
@@ -18,6 +19,28 @@ def _get_session_state_dir() -> Path:
     raw = os.environ.get("COPILOT_SESSION_STATE_DIR") or _DEFAULT_SESSION_STATE_DIR
     return Path(os.path.expanduser(raw))
 
+
+def _get_copilot_home() -> Path:
+    return Path(os.path.expanduser("~/.copilot"))
+
+
+def get_copilot_user_info() -> CopilotUserInfo:
+    """Read current user info from ~/.copilot/config.json."""
+    config_path = _get_copilot_home() / "config.json"
+    if not config_path.is_file():
+        return CopilotUserInfo()
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        last_user = data.get("last_logged_in_user", {})
+        current = last_user.get("login") if isinstance(last_user, dict) else None
+        all_users = [
+            u.get("login", "")
+            for u in data.get("logged_in_users", [])
+            if isinstance(u, dict) and u.get("login")
+        ]
+        return CopilotUserInfo(current_user=current, all_users=all_users)
+    except (json.JSONDecodeError, OSError):
+        return CopilotUserInfo()
 
 def _count_lines(filepath: Path) -> int:
     """Count lines in a file without reading all content into memory."""

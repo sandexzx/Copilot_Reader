@@ -1,6 +1,6 @@
 /** API client for Copilot Reader backend. */
 
-import type { Session, SessionSummary, Event, SessionStats, TreeNode, DailyUsageResponse, DeleteResult } from './types';
+import type { Session, SessionSummary, Event, SessionStats, TreeNode, DailyUsageResponse, DeleteResult, CopilotUserInfo } from './types';
 
 function getBaseUrl(): string {
 	if (typeof window === 'undefined') return 'http://localhost:8000';
@@ -75,4 +75,8 @@ export function deleteSessionsByDateRange(dateFrom: string, dateTo: string): Pro
 		method: 'DELETE',
 		body: { date_from: dateFrom, date_to: dateTo }
 	});
+}
+
+export function fetchCopilotUser(): Promise<CopilotUserInfo> {
+	return apiFetch<CopilotUserInfo>('/api/sessions/copilot-user');
 }

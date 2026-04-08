@@ -1,6 +1,8 @@
 <script lang="ts">
   import { settingsStore } from '$lib/stores/settings.svelte';
   import { dailyUsageStore } from '$lib/stores/dailyUsage.svelte';
+  import { fetchCopilotUser } from '$lib/api';
+  import type { CopilotUserInfo } from '$lib/types';
 
   const OUTPUT_RATE_LIMIT = 320_000;
 
@@ -15,12 +17,15 @@
     'var(--green)'
   );
 
+  let copilotUser = $state<CopilotUserInfo | null>(null);
+
   function openSettings() {
     settingsStore.showSettings = true;
   }
 
   $effect(() => {
     dailyUsageStore.init();
+    fetchCopilotUser().then(u => copilotUser = u).catch(() => {});
   });
 </script>
 
@@ -43,6 +48,15 @@
     {/if}
   {/if}
   <div class="header-spacer"></div>
+  {#if copilotUser?.current_user}
+    <div class="user-badge" title={copilotUser.all_users.length > 1 ? `Accounts: ${copilotUser.all_users.join(', ')}` : copilotUser.current_user}>
+      <span class="user-icon">👤</span>
+      <span class="user-login">{copilotUser.current_user}</span>
+      {#if copilotUser.all_users.length > 1}
+        <span class="user-count">{copilotUser.all_users.length}</span>
+      {/if}
+    </div>
+  {/if}
   {#if dailyUsageStore.data}
     <div class="rate-limit-badge" title="Daily output tokens: {dailyOutputTokens.toLocaleString()} / 320K">
       <span class="rate-label">Rate</span>
@@ -194,6 +208,42 @@
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
+  }
+
+  .user-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding: 2px 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  .user-icon {
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  .user-login {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-accent);
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .user-count {
+    font-size: 9px;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.08);
+    padding: 0 4px;
+    border-radius: 6px;
+    line-height: 15px;
   }
 
   .rate-label {

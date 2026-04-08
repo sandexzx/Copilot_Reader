@@ -98,3 +98,8 @@ export interface DeleteResult {
 	not_found: string[];
 	errors: Record<string, string>;
 }
+
+export interface CopilotUserInfo {
+	current_user: string | null;
+	all_users: string[];
+}

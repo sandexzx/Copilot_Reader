@@ -14,6 +14,7 @@ from ..event_parser import (
     parse_events_file,
 )
 from ..models import (
+    CopilotUserInfo,
     DailyUsageResponse,
     DateRangeDeleteRequest,
     DeleteRequest,
@@ -29,6 +30,7 @@ from ..session_manager import (
     delete_session,
     delete_sessions_by_date_range,
     discover_sessions,
+    get_copilot_user_info,
     get_session,
 )
 from ..usage_aggregator import get_daily_usage
@@ -64,6 +66,16 @@ async def get_daily_usage_stats() -> DailyUsageResponse:
         return await get_daily_usage()
     except Exception as exc:
         logger.exception("Failed to compute daily usage stats")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
+@router.get("/copilot-user", response_model=CopilotUserInfo)
+async def get_current_copilot_user() -> CopilotUserInfo:
+    """Get the currently logged-in Copilot CLI user."""
+    try:
+        return get_copilot_user_info()
+    except Exception as exc:
+        logger.exception("Failed to read Copilot user info")
         raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 

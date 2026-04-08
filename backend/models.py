@@ -124,6 +124,13 @@ class DeleteResult(BaseModel):
     errors: dict[str, str] = Field(default_factory=dict)
 
 
+class CopilotUserInfo(BaseModel):
+    """Current Copilot CLI user info from config.json."""
+
+    current_user: str | None = None
+    all_users: list[str] = Field(default_factory=list)
+
+
 class WebSocketMessage(BaseModel):
     """Messages sent over WebSocket."""
 
