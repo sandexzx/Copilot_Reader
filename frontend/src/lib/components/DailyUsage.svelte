@@ -8,9 +8,21 @@
     'claude-opus-4.6': { input: 5, output: 25 },
   };
   const USD_TO_RUB = 81.25;
+  const OUTPUT_RATE_LIMIT = 320_000;
 
   let data = $derived(dailyUsageStore.data);
   let loading = $derived(dailyUsageStore.loading);
+
+  let dailyOutputTokens = $derived(data?.totals?.output_tokens ?? 0);
+  let dailyOutputRatio = $derived(dailyOutputTokens / OUTPUT_RATE_LIMIT);
+  let dailyOutputPct = $derived(Math.min(dailyOutputRatio * 100, 100));
+  let rateLimitColor = $derived(
+    dailyOutputRatio > 0.95 ? 'var(--red)' :
+    dailyOutputRatio > 0.8 ? 'var(--orange)' :
+    dailyOutputRatio > 0.5 ? 'var(--color-warning)' :
+    'var(--green)'
+  );
+  let rateLimitWarning = $derived(dailyOutputRatio > 0.8);
 
   function formatTokens(n: number): string {
     if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -95,6 +107,21 @@
             <span class="cost-value">${formatCost(totalCostUsd)} · {formatCost(totalCostRub)}₽</span>
           </div>
         {/if}
+        <div class="rate-limit-section">
+          <div class="rate-limit-labels">
+            <span class="rate-limit-title">Output Limit</span>
+            <span class="rate-limit-value" style="color: {rateLimitColor}">
+              {Math.round(dailyOutputPct)}% · {formatTokens(dailyOutputTokens)} / 320K
+            </span>
+          </div>
+          <div class="rate-limit-track" class:rate-warning={rateLimitWarning}>
+            <div
+              class="rate-limit-fill"
+              class:rate-warning-fill={rateLimitWarning}
+              style="width: {dailyOutputPct}%; background: {rateLimitColor}"
+            ></div>
+          </div>
+        </div>
       </div>
     {/if}
   {/if}
@@ -274,5 +301,67 @@
     font-size: 10px;
     font-family: var(--font-mono);
     color: var(--orange);
+  }
+
+  .rate-limit-section {
+    margin-top: 6px;
+    padding: 5px 4px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .rate-limit-labels {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+
+  .rate-limit-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .rate-limit-value {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+  }
+
+  .rate-limit-track {
+    width: 100%;
+    height: 6px;
+    background: rgba(30, 30, 30, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .rate-limit-track.rate-warning {
+    border-color: var(--orange);
+  }
+
+  .rate-limit-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 1s ease, background 0.5s ease;
+    min-width: 1px;
+  }
+
+  .rate-limit-fill.rate-warning-fill {
+    box-shadow: 0 0 6px rgba(206, 145, 120, 0.5);
+    animation: rate-glow 2s ease-in-out infinite;
+  }
+
+  @keyframes rate-glow {
+    0%, 100% {
+      box-shadow: 0 0 4px rgba(206, 145, 120, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 8px rgba(206, 145, 120, 0.7);
+    }
   }
 </style>

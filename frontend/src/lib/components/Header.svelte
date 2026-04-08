@@ -1,11 +1,27 @@
 <script lang="ts">
   import { settingsStore } from '$lib/stores/settings.svelte';
+  import { dailyUsageStore } from '$lib/stores/dailyUsage.svelte';
+
+  const OUTPUT_RATE_LIMIT = 320_000;
 
   let { sessionId = '', isConnected = false, isActive = false } = $props();
+
+  let dailyOutputTokens = $derived(dailyUsageStore.data?.totals?.output_tokens ?? 0);
+  let dailyOutputRatio = $derived(dailyOutputTokens / OUTPUT_RATE_LIMIT);
+  let dailyOutputPct = $derived(Math.min(dailyOutputRatio * 100, 100));
+  let rateLimitColor = $derived(
+    dailyOutputRatio > 0.8 ? 'var(--red)' :
+    dailyOutputRatio > 0.5 ? 'var(--color-warning)' :
+    'var(--green)'
+  );
 
   function openSettings() {
     settingsStore.showSettings = true;
   }
+
+  $effect(() => {
+    dailyUsageStore.init();
+  });
 </script>
 
 <header class="header">
@@ -27,6 +43,15 @@
     {/if}
   {/if}
   <div class="header-spacer"></div>
+  {#if dailyUsageStore.data}
+    <div class="rate-limit-badge" title="Daily output tokens: {dailyOutputTokens.toLocaleString()} / 320K">
+      <span class="rate-label">Rate</span>
+      <div class="rate-track">
+        <div class="rate-fill" style="width: {dailyOutputPct}%; background: {rateLimitColor}"></div>
+      </div>
+      <span class="rate-pct" style="color: {rateLimitColor}">{Math.round(dailyOutputPct)}%</span>
+    </div>
+  {/if}
   <button class="settings-btn" onclick={openSettings} title="Настройки AI перевода" class:configured={settingsStore.isConfigured}>
     ⚙️
   </button>
@@ -162,5 +187,45 @@
   .settings-btn.configured {
     filter: none;
     border-color: rgba(78, 201, 176, 0.3);
+  }
+
+  .rate-limit-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .rate-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: var(--font-mono);
+  }
+
+  .rate-track {
+    width: 80px;
+    height: 6px;
+    background: var(--bg-input);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .rate-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 1s ease, background 0.5s ease;
+    min-width: 2px;
+  }
+
+  .rate-pct {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    min-width: 28px;
+    text-align: right;
   }
 </style>
