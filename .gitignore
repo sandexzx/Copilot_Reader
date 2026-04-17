@@ -37,7 +37,8 @@ pnpm-debug.log*
 
 # Editor / OS noise
 .idea/
-.vscode/
+.vscode/*
+!.vscode/tasks.json
 *.swp
 *.swo
 *~
