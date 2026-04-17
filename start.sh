@@ -12,6 +12,23 @@ info()  { printf "${GREEN}[INFO]${NC}  %s\n" "$*"; }
 warn()  { printf "${YELLOW}[WARN]${NC}  %s\n" "$*"; }
 error() { printf "${RED}[ERROR]${NC} %s\n" "$*" >&2; }
 
+open_chrome() {
+    local url="$1"
+    for browser in google-chrome google-chrome-stable chromium chromium-browser; do
+        if command -v "$browser" &>/dev/null; then
+            "$browser" "$url" &>/dev/null &
+            info "Opening $url in Chrome …"
+            return
+        fi
+    done
+    warn "Chrome not found — open $url manually"
+}
+
+wait_and_open() {
+    local url="$1"
+    (until curl -s -o /dev/null "$url"; do sleep 1; done; open_chrome "$url") &
+}
+
 # ─── Resolve project root (directory containing this script) ─────────────────
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
@@ -148,6 +165,7 @@ if [[ "$MODE" == "dev" ]]; then
     info "  Press Ctrl+C to stop both servers"
     info "──────────────────────────────────────────"
 
+    wait_and_open "http://localhost:$VITE_PORT"
     wait
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -162,6 +180,7 @@ else
 
     info "Starting uvicorn on port $PORT …"
     info "App available at http://localhost:$PORT"
+    wait_and_open "http://localhost:$PORT"
     exec "$PYTHON" -m uvicorn backend.main:app \
         --host 0.0.0.0 \
         --port "$PORT"
