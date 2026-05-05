@@ -8,7 +8,7 @@
     'claude-opus-4.6': { input: 5, output: 25 },
   };
   const USD_TO_RUB = 81.25;
-  const OUTPUT_RATE_LIMIT = 320_000;
+  const OUTPUT_RATE_LIMIT = 640_000;
 
   let data = $derived(dailyUsageStore.data);
   let loading = $derived(dailyUsageStore.loading);
@@ -111,7 +111,7 @@
           <div class="rate-limit-labels">
             <span class="rate-limit-title">Output Limit</span>
             <span class="rate-limit-value" style="color: {rateLimitColor}">
-              {Math.round(dailyOutputPct)}% · {formatTokens(dailyOutputTokens)} / 320K
+              {Math.round(dailyOutputPct)}% · {formatTokens(dailyOutputTokens)} / 640K
             </span>
           </div>
           <div class="rate-limit-track" class:rate-warning={rateLimitWarning}>

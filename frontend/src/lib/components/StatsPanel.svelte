@@ -12,7 +12,7 @@
   );
 
   const TOKEN_HINT = 'Данные появятся после завершения сессии';
-  const OUTPUT_RATE_LIMIT = 320_000;
+  const OUTPUT_RATE_LIMIT = 640_000;
 
   $effect(() => {
     dailyUsageStore.init();
@@ -129,7 +129,7 @@
         <div class="output-legend">
           <span class="legend-item"><span class="legend-dot session-dot"></span> Session</span>
           <span class="legend-item"><span class="legend-dot daily-dot"></span> Today</span>
-          <span class="legend-pct">{Math.round(dailyOutputRatio * 100)}% of 320K limit</span>
+          <span class="legend-pct">{Math.round(dailyOutputRatio * 100)}% of 640K limit</span>
         </div>
       </div>
     </div>

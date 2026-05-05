@@ -4,7 +4,7 @@
   import { fetchCopilotUser } from '$lib/api';
   import type { CopilotUserInfo } from '$lib/types';
 
-  const OUTPUT_RATE_LIMIT = 320_000;
+  const OUTPUT_RATE_LIMIT = 640_000;
 
   let { sessionId = '', isConnected = false, isActive = false } = $props();
 
@@ -58,7 +58,7 @@
     </div>
   {/if}
   {#if dailyUsageStore.data}
-    <div class="rate-limit-badge" title="Daily output tokens: {dailyOutputTokens.toLocaleString()} / 320K">
+    <div class="rate-limit-badge" title="Daily output tokens: {dailyOutputTokens.toLocaleString()} / 640K">
       <span class="rate-label">Rate</span>
       <div class="rate-track">
         <div class="rate-fill" style="width: {dailyOutputPct}%; background: {rateLimitColor}"></div>

@@ -115,7 +115,7 @@
 ## 💡 Решения и заметки
 - MEMORY.md обновляется по мере хода разработки
 - При крэше контекста — начинай с чтения этого файла
-- Rate limit 320K output tokens/day — константа захардкожена во фронтенде (`OUTPUT_RATE_LIMIT`), не приходит с бэкенда
+- Rate limit 640K output tokens/day — константа захардкожена во фронтенде (`OUTPUT_RATE_LIMIT`), не приходит с бэкенда
 - `dailyUsageStore` — singleton, polling каждые 30с + debounced 5с после WS-событий. Init идемпотентен.
 - Процент rate limit теперь отображается в 3 местах: Header (badge), Sidebar DailyUsage (прогресс-бар), StatsPanel (Output bar + legend)
 - Текущий GitHub-аккаунт читается из `~/.copilot/config.json` → `last_logged_in_user.login`. Все аккаунты в `logged_in_users[]`.
